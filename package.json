@@ -1,0 +1,63 @@
+{
+  "name": "backend-web-project-ecommerce",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Web Project Backend",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "lint": "eslint src --ext js --report-unused-disable-directives --max-warnings 0",
+    "clean": "rm -rf build && mkdir build",
+    "build-babel": "babel ./src -d ./build/src",
+    "build": "npm run clean && npm run build-babel",
+    "production": "npm run build && cross-env BUILD_MODE=production node ./build/src/server.js",
+    "start": "cross-env BUILD_MODE=dev nodemon --exec babel-node ./src/server.js",
+    "setup-indexes": "babel-node src/scripts/setupProductIndexes.js"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.27.0",
+    "@elastic/elasticsearch": "^9.2.0",
+    "@google/genai": "^1.30.0",
+    "@google/generative-ai": "^0.24.1",
+    "async-exit-hook": "^2.0.1",
+    "axios": "^1.13.1",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.7.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.1",
+    "form-data": "^4.0.4",
+    "google-auth-library": "^10.3.0",
+    "http-status-codes": "^2.3.0",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "mailgun.js": "^12.1.1",
+    "mongodb": "^6.8.0",
+    "ms": "^2.1.3",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.2.1",
+    "resend": "^6.4.2",
+    "socket.io": "^4.8.1",
+    "streamifier": "^0.1.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^9.0.1",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.22.10",
+    "@babel/core": "^7.22.10",
+    "@babel/eslint-parser": "^7.22.10",
+    "@babel/node": "^7.22.10",
+    "@babel/plugin-transform-runtime": "^7.22.10",
+    "@babel/preset-env": "^7.22.10",
+    "babel-plugin-module-resolver": "^5.0.0",
+    "eslint": "^8.47.0",
+    "nodemon": "^3.0.1"
+  }
+}
