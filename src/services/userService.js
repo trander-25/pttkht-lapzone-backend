@@ -1,278 +1,188 @@
-import { userModel } from '~/models/userModel'
+/**
+ * USER SERVICE - Business Logic Layer
+ * Implements exact functions from User entity specification
+ */
+
+import bcrypt from 'bcryptjs'
+import { User } from '../models/index'
+import ApiError from '../utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
-import ApiError from '~/utils/ApiError'
-import bcryptjs from 'bcryptjs'
-import { v4 as uuidv4 } from 'uuid'
-import { pickUser } from '~/utils/formatters'
-import { ObjectId } from 'mongodb'
-import { WEBSITE_DOMAIN } from '~/utils/constants'
-import { env } from '~/config/environment'
-import { JwtProvider } from '~/providers/JwtProvider'
-import { CloudinaryProvider } from '~/providers/CloudinaryProvider'
+import { Op } from 'sequelize'
 
 /**
- * Cập nhật thông tin người dùng
- * Hỗ trợ 3 loại cập nhật:
- * 1. Upload avatar lên Cloudinary
- * 2. Cập nhật danh sách địa chỉ (với logic xử lý địa chỉ mặc định)
- * 3. Cập nhật thông tin cá nhân (username, fullName, phoneNumber, etc.)
- * @param {string} userId - ID người dùng
- * @param {object} reqBody - Dữ liệu cần cập nhật
- * @param {file} userAvatarFile - File avatar (từ Multer)
- * @returns {object} Thông tin người dùng đã cập nhật
+ * Checks if the email is already registered
+ * @param {string} email - Email to check
+ * @returns {Promise<Boolean>} - True if email exists, false otherwise
  */
-const updateUser = async (userId, reqBody, userAvatarFile) => {
+const checkEmailExistence = async (email) => {
   try {
-    // Xác minh người dùng tồn tại và tài khoản đang active
-    const existUser = await userModel.findOneById(userId)
-    if (!existUser) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found!')
-    if (!existUser.isActive) throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'Your account is not active!')
-
-    // Khởi tạo biến cho kết quả cập nhật
-    let updatedUser = {}
-
-    // Xử lý upload avatar
-    if (userAvatarFile) {
-      // Upload avatar lên Cloudinary cloud storage
-      const uploadResult = await CloudinaryProvider.streamUpload(userAvatarFile.buffer, 'user_avatars')
-
-      // Lưu URL an toàn của ảnh đã upload vào database
-      updatedUser = await userModel.updateOneById(existUser._id, {
-        avatar: uploadResult.secure_url
-      })
-    } else if (reqBody.addresses) {
-      // Xử lý cập nhật địa chỉ với logic xử lý địa chỉ mặc định
-      let processedAddresses = [...reqBody.addresses]
-
-      // Tìm xem có địa chỉ nào được đánh dấu là mặc định không
-      const newDefaultIndex = processedAddresses.findIndex(addr => addr.isDefault === true)
-
-      if (newDefaultIndex !== -1) {
-        // Nếu có địa chỉ mặc định mới, set tất cả các địa chỉ khác thành false
-        processedAddresses = processedAddresses.map((addr, index) => ({
-          ...addr,
-          isDefault: index === newDefaultIndex
-        }))
-      } else {
-        // Nếu không có địa chỉ nào được đánh dấu mặc định, giữ nguyên hoặc set địa chỉ đầu tiên làm mặc định
-        const hasAnyDefault = processedAddresses.some(addr => addr.isDefault)
-        if (!hasAnyDefault && processedAddresses.length > 0) {
-          processedAddresses[0].isDefault = true
-        }
-      }
-
-      updatedUser = await userModel.updateOneById(existUser._id, {
-        addresses: processedAddresses
-      })
-    } else {
-      // Xử lý cập nhật thông tin cá nhân chung
-      updatedUser = await userModel.updateOneById(existUser._id, reqBody)
-    }
-
-    return pickUser(updatedUser)
-  } catch (error) { throw error }
+    const user = await User.findOne({ where: { email } })
+    return !!user // Convert to boolean
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error checking email existence')
+  }
 }
 
 /**
- * Thêm địa chỉ giao hàng mới
- * Logic:
- * - Tự động tạo addressId duy nhất
- * - Nếu địa chỉ mới được đánh dấu isDefault=true: Set tất cả địa chỉ khác thành non-default
- * - Nếu là địa chỉ đầu tiên: Tự động set làm default
- * @param {string} userId - ID người dùng
- * @param {object} newAddress - Thông tin địa chỉ mới
- * @returns {object} Thông tin người dùng với địa chỉ mới
+ * Saves a new user into the database
+ * @param {Object} user - User data { email, password, full_name, phone, role }
+ * @returns {Promise<Boolean>} - True if successful, false otherwise
  */
-const addAddress = async (userId, newAddress) => {
+const insertUser = async (user) => {
   try {
-    const existUser = await userModel.findOneById(userId)
-    if (!existUser) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found!')
-    if (!existUser.isActive) throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'Your account is not active!')
-
-    const currentAddresses = existUser.addresses || []
-
-    // Tạo addressId cho địa chỉ mới
-    newAddress.addressId = new ObjectId().toString()
-
-    // Nếu địa chỉ mới được đánh dấu là default
-    if (newAddress.isDefault) {
-      // Set tất cả địa chỉ hiện tại thành non-default
-      currentAddresses.forEach(addr => {
-        addr.isDefault = false
-      })
-    } else if (currentAddresses.length === 0) {
-      // Nếu đây là địa chỉ đầu tiên, tự động set làm default
-      newAddress.isDefault = true
-    }
-
-    // Thêm địa chỉ mới vào cuối mảng
-    const updatedAddresses = [...currentAddresses, newAddress]
-
-    const updatedUser = await userModel.updateOneById(userId, {
-      addresses: updatedAddresses
+    // Hash password before saving
+    const hashedPassword = await bcrypt.hash(user.password, 10)
+    
+    await User.create({
+      email: user.email,
+      password: hashedPassword,
+      full_name: user.full_name,
+      phone: user.phone || null,
+      role: user.role || 'CUSTOMER'
     })
-
-    return pickUser(updatedUser)
-  } catch (error) { throw error }
+    
+    return true
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error inserting user')
+  }
 }
 
 /**
- * Cập nhật địa chỉ giao hàng hiện có
- * Logic phức tạp:
- * - Nếu cập nhật isDefault=true: Phải set tất cả địa chỉ khác thành non-default
- * - Nếu cập nhật thông tin bình thường: Merge dữ liệu cũ với dữ liệu mới
- * @param {string} userId - ID người dùng
- * @param {object} param - { addressId, ...updateData }
- * @returns {object} Thông tin người dùng đã cập nhật
+ * Checks if login credentials are correct
+ * @param {string} email - User's email
+ * @param {string} password - User's password
+ * @returns {Promise<Boolean>} - True if credentials are valid, false otherwise
  */
-const updateAddress = async (userId, { addressId, ...updateData }) => {
+const validateSignIn = async (email, password) => {
   try {
-    const existUser = await userModel.findOneById(userId)
-    if (!existUser) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found!')
-    if (!existUser.isActive) throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'Your account is not active!')
-
-    // Kiểm tra xem địa chỉ có tồn tại không
-    const addressExists = existUser.addresses?.find(addr => addr.addressId === addressId)
-    if (!addressExists) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'Address not found!')
-    }
-
-    // Nếu cập nhật isDefault = true, cần xử lý logic default cho toàn bộ mảng
-    if (updateData.isDefault === true) {
-      // Set tất cả địa chỉ khác thành non-default, chỉ địa chỉ được cập nhật là default
-      const updatedAddresses = existUser.addresses.map(addr => ({
-        ...addr,
-        // Nếu là địa chỉ đang được cập nhật, merge với updateData và set isDefault = true
-        ...(addr.addressId === addressId ? updateData : {}),
-        isDefault: addr.addressId === addressId
-      }))
-
-      const updatedUser = await userModel.updateOneById(userId, {
-        addresses: updatedAddresses
-      })
-      return pickUser(updatedUser)
-    } else {
-      // Trường hợp cập nhật thông tin bình thường (không thay đổi default)
-      // Merge dữ liệu cũ với dữ liệu mới
-      const mergedAddressData = {
-        ...addressExists,
-        ...updateData,
-        addressId // Đảm bảo addressId không bị thay đổi
-      }
-
-      const updatedUser = await userModel.updateAddressById(userId, addressId, mergedAddressData)
-      return pickUser(updatedUser)
-    }
-  } catch (error) { throw error }
-}
-
-/**
- * Xóa địa chỉ giao hàng
- * Kiểm tra địa chỉ tồn tại trước khi xóa
- * @param {string} userId - ID người dùng
- * @param {string} addressId - ID địa chỉ cần xóa
- * @returns {object} Thông tin người dùng sau khi xóa địa chỉ
- */
-const deleteAddress = async (userId, addressId) => {
-  try {
-    const existUser = await userModel.findOneById(userId)
-    if (!existUser) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found!')
-    if (!existUser.isActive) throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'Your account is not active!')
-
-    // Kiểm tra xem địa chỉ có tồn tại không
-    const addressToDelete = existUser.addresses?.find(addr => addr.addressId === addressId)
-    if (!addressToDelete) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'Address not found!')
-    }
-
-    const updatedUser = await userModel.deleteAddressById(userId, addressId)
-
-    // Nếu xóa địa chỉ mặc định và còn địa chỉ khác, set địa chỉ đầu tiên làm mặc định
-    if (addressToDelete.isDefault && updatedUser.addresses?.length > 0) {
-      const updatedAddresses = updatedUser.addresses.map((addr, index) => ({
-        ...addr,
-        isDefault: index === 0
-      }))
-
-      const finalUser = await userModel.updateOneById(userId, {
-        addresses: updatedAddresses
-      })
-      return pickUser(finalUser)
-    }
-
-    return pickUser(updatedUser)
-  } catch (error) { throw error }
-}
-
-/**
- * ADMIN SERVICES - User Management
- */
-
-// Get all users with pagination and filters
-const getAllUsers = async ({ page = 1, limit = 20, search = '', role = '' }) => {
-  try {
-    const result = await userModel.findAllWithPagination({ page, limit, search, role })
-
-    // Remove sensitive fields from users
-    const sanitizedUsers = result.users.map(user => pickUser(user))
-
-    return {
-      users: sanitizedUsers,
-      pagination: result.pagination
-    }
-  } catch (error) { throw error }
-}
-
-// Get user detail by ID (for admin)
-const getUserDetailByAdmin = async (userId) => {
-  try {
-    const user = await userModel.findOneById(userId)
-
+    const user = await User.findOne({ where: { email } })
+    
     if (!user) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'User not found!')
+      return false
     }
-
-    return pickUser(user)
-  } catch (error) { throw error }
+    
+    // Validate password
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+    return isPasswordValid
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error validating sign in')
+  }
 }
 
-// Update user by admin (can update more fields than regular user, including role)
-const updateUserByAdmin = async (userId, updateData) => {
+/**
+ * Updates the user's password
+ * @param {number} user_id - User ID
+ * @param {string} new_pass - New password
+ * @returns {Promise<Boolean>} - True if successful, false otherwise
+ */
+const updatePassword = async (user_id, new_pass) => {
   try {
-    const existUser = await userModel.findOneById(userId)
+    const hashedPassword = await bcrypt.hash(new_pass, 10)
+    
+    const [updated] = await User.update(
+      { password: hashedPassword },
+      { where: { user_id } }
+    )
+    
+    return updated > 0
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error updating password')
+  }
+}
 
-    if (!existUser) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'User not found!')
-    }
-
-    // Admin can update most fields except password (use separate endpoint)
-    const allowedFields = ['username', 'phone', 'sex', 'isActive', 'addresses', 'role']
-    const filteredData = {}
-
-    Object.keys(updateData).forEach(key => {
-      if (allowedFields.includes(key)) {
-        filteredData[key] = updateData[key]
-      }
+/**
+ * Gets the user's personal information
+ * @param {number} user_id - User ID
+ * @returns {Promise<Object>} - User object
+ */
+const getUserProfile = async (user_id) => {
+  try {
+    const user = await User.findByPk(user_id, {
+      attributes: { exclude: ['password'] } // Don't return password
     })
-
-    // Validate role if provided
-    if (filteredData.role && !Object.values(userModel.USER_ROLES).includes(filteredData.role)) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid role!')
+    
+    if (!user) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'User not found')
     }
+    
+    return user
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting user profile')
+  }
+}
 
-    const updatedUser = await userModel.updateOneById(userId, filteredData)
+/**
+ * Saves changes to user profile info
+ * @param {Object} user - User data { user_id, full_name, phone }
+ * @returns {Promise<Boolean>} - True if successful, false otherwise
+ */
+const updateUserProfile = async (user) => {
+  try {
+    const updateData = {}
+    
+    if (user.full_name) updateData.full_name = user.full_name
+    if (user.phone) updateData.phone = user.phone
+    
+    const [updated] = await User.update(updateData, {
+      where: { user_id: user.user_id }
+    })
+    
+    return updated > 0
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error updating user profile')
+  }
+}
 
-    return pickUser(updatedUser)
-  } catch (error) { throw error }
+/**
+ * Gets a list of all users for Admin
+ * @returns {Promise<Array>} - List of users
+ */
+const getAllUsers = async () => {
+  try {
+    const users = await User.findAll({
+      attributes: { exclude: ['password'] },
+      order: [['user_id', 'DESC']]
+    })
+    
+    return users
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting all users')
+  }
+}
+
+/**
+ * Finds users matching the keyword
+ * @param {string} keyword - Search keyword
+ * @returns {Promise<Array>} - List of matching users
+ */
+const searchUsers = async (keyword) => {
+  try {
+    const users = await User.findAll({
+      where: {
+        [Op.or]: [
+          { email: { [Op.like]: `%${keyword}%` } },
+          { full_name: { [Op.like]: `%${keyword}%` } },
+          { phone: { [Op.like]: `%${keyword}%` } }
+        ]
+      },
+      attributes: { exclude: ['password'] }
+    })
+    
+    return users
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error searching users')
+  }
 }
 
 export const userService = {
-  updateUser,
-  addAddress,
-  updateAddress,
-  deleteAddress,
-  // Admin services
+  checkEmailExistence,
+  insertUser,
+  validateSignIn,
+  updatePassword,
+  getUserProfile,
+  updateUserProfile,
   getAllUsers,
-  getUserDetailByAdmin,
-  updateUserByAdmin
+  searchUsers
 }

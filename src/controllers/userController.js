@@ -1,150 +1,227 @@
+/**
+ * USER CONTROLLER - User Profile & Admin Management
+ * Implements user profile and admin functions
+ */
+
 import { StatusCodes } from 'http-status-codes'
-import { userService } from '~/services/userService'
-import ApiError from '~/utils/ApiError'
+import { userService } from '../services/userService'
+import ApiError from '../utils/ApiError'
+import bcrypt from 'bcryptjs'
+import { User } from '../models/index.js'
 
 /**
- * Cập nhật thông tin người dùng
- * Có thể cập nhật username, fullName, phoneNumber, avatar
- * @param {object} req.body - Thông tin cần cập nhật
- * @param {file} req.file - File ảnh avatar (từ Multer)
- * @returns {object} Thông tin người dùng đã cập nhật
+ * USER PROFILE CONTROLLERS
  */
-const updateUser = async (req, res, next) => {
+
+/**
+ * Get current user's profile
+ * @returns {Object} - User profile data
+ */
+const getProfile = async (req, res, next) => {
   try {
-    const userId = req.jwtDecoded._id
-    const userAvatarFile = req.file
-    const updatedUser = await userService.updateUser(userId, req.body, userAvatarFile)
+    const userId = req.jwtDecoded.user_id
 
-    res.status(StatusCodes.OK).json(updatedUser)
-  } catch (error) { next(error) }
-}
-
-/**
- * Thêm địa chỉ giao hàng mới
- * @param {object} req.body - Thông tin địa chỉ (fullName, phoneNumber, province, district, ward, detailAddress, isDefault)
- * @returns {object} Thông tin người dùng với địa chỉ mới
- */
-const addAddress = async (req, res, next) => {
-  try {
-    const userId = req.jwtDecoded._id
-    const updatedUser = await userService.addAddress(userId, req.body)
-
-    res.status(StatusCodes.CREATED).json(updatedUser)
-  } catch (error) { next(error) }
-}
-
-/**
- * Cập nhật địa chỉ giao hàng hiện có
- * @param {object} req.body - Thông tin địa chỉ cần cập nhật (bao gồm addressId)
- * @returns {object} Thông tin người dùng với địa chỉ đã cập nhật
- */
-const updateAddress = async (req, res, next) => {
-  try {
-    const userId = req.jwtDecoded._id
-    const updatedUser = await userService.updateAddress(userId, req.body)
-    res.status(StatusCodes.OK).json(updatedUser)
-  } catch (error) { next(error) }
-}
-
-/**
- * Xóa địa chỉ giao hàng
- * @param {object} req.body - Chứa addressId cần xóa
- * @returns {object} Thông tin người dùng sau khi xóa địa chỉ
- */
-const deleteAddress = async (req, res, next) => {
-  try {
-    const userId = req.jwtDecoded._id
-    const { addressId } = req.body
-
-    if (!addressId) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, 'addressId is required')
-    }
-
-    const updatedUser = await userService.deleteAddress(userId, addressId)
-    res.status(StatusCodes.OK).json(updatedUser)
-  } catch (error) { next(error) }
-}
-
-/**
- * ====================
- * ADMIN CONTROLLERS - Quản lý người dùng
- * ====================
- */
-
-/**
- * Lấy danh sách tất cả người dùng với phân trang và tìm kiếm (Admin)
- * GET /api/v1/users/admin/all
- * @param {object} req.query - Tham số (page, limit, search, role)
- * @returns {object} Danh sách người dùng và thông tin phân trang
- */
-// GET /api/v1/users/admin/all - Get all users with pagination
-const getAllUsers = async (req, res, next) => {
-  try {
-    const { page = 1, limit = 20, search = '', role = '' } = req.query
-
-    const result = await userService.getAllUsers({
-      page: parseInt(page),
-      limit: parseInt(limit),
-      search,
-      role
-    })
-
-    res.status(StatusCodes.OK).json({
-      success: true,
-      data: result
-    })
-  } catch (error) { next(error) }
-}
-
-/**
- * Lấy thông tin chi tiết người dùng (Admin)
- * GET /api/v1/users/admin/:userId
- * @param {string} req.params.userId - ID của người dùng
- * @returns {object} Thông tin chi tiết người dùng
- */
-// GET /api/v1/users/admin/:userId - Get user detail
-const getUserDetail = async (req, res, next) => {
-  try {
-    const { userId } = req.params
-
-    const user = await userService.getUserDetailByAdmin(userId)
+    const user = await userService.getUserProfile(userId)
 
     res.status(StatusCodes.OK).json({
       success: true,
       data: user
     })
-  } catch (error) { next(error) }
+  } catch (error) {
+    next(error)
+  }
 }
 
 /**
- * Cập nhật thông tin người dùng bởi Admin
- * PUT /api/v1/users/admin/:userId
- * Admin có thể cập nhật role, isActive, và các thông tin khác
- * @param {string} req.params.userId - ID của người dùng
- * @param {object} req.body - Dữ liệu cần cập nhật
- * @returns {object} Thông tin người dùng đã cập nhật
+ * Update current user's profile
+ * @param {Object} req.body - { full_name, phone }
+ * @returns {Object} - { success: boolean }
  */
-// PUT /api/v1/users/admin/:userId - Update user info by admin
-const updateUserByAdmin = async (req, res, next) => {
+const updateProfile = async (req, res, next) => {
   try {
-    const { userId } = req.params
+    const userId = req.jwtDecoded.user_id
+    const { full_name, phone } = req.body
+    
+    const result = await userService.updateUserProfile({
+      user_id: userId,
+      full_name,
+      phone
+    })
+    
+    res.status(StatusCodes.OK).json({
+      success: result,
+      message: 'Profile updated successfully'
+    })
+  } catch (error) {
+    next(error)
+  }
+}
 
-    const updatedUser = await userService.updateUserByAdmin(userId, req.body)
+/**
+ * Update current user's password
+ * @param {Object} req.body - { current_password, new_password }
+ * @returns {Object} - { success: boolean }
+ */
+const changePassword = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded.user_id
+    const { current_password, new_password } = req.body
+    
+    // Get user to validate current password
+    const user = await User.findOne({ where: { user_id: userId } })
+    
+    if (!user) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'User not found')
+    }
+    
+    // Validate current password
+    const isCurrentPasswordValid = await bcrypt.compare(current_password, user.password)
+    
+    if (!isCurrentPasswordValid) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, 'Current password is incorrect')
+    }
+    
+    // Update to new password
+    const result = await userService.updatePassword(userId, new_password)
+    
+    res.status(StatusCodes.OK).json({
+      success: result,
+      message: 'Password changed successfully'
+    })
+  } catch (error) {
+    next(error)
+  }
+}
 
+/**
+ * ADMIN CONTROLLERS
+ */
+
+/**
+ * Get all users (Admin only)
+ * @returns {Object} - { success: boolean, data: Array }
+ */
+const getAllUsers = async (req, res, next) => {
+  try {
+    const users = await userService.getAllUsers()
+    
     res.status(StatusCodes.OK).json({
       success: true,
-      data: updatedUser
+      data: users
     })
-  } catch (error) { next(error) }
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * Search users by keyword (Admin only)
+ * @param {string} req.query.keyword - Search keyword
+ * @returns {Object} - { success: boolean, data: Array }
+ */
+const searchUsers = async (req, res, next) => {
+  try {
+    const { keyword } = req.query
+    
+    if (!keyword) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Keyword is required')
+    }
+    
+    const users = await userService.searchUsers(keyword)
+    
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: users
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * Get user detail by ID (Admin only)
+ * @param {number} req.params.user_id - User ID
+ * @returns {Object} - { success: boolean, data: Object }
+ */
+const getUserById = async (req, res, next) => {
+  try {
+    const { user_id } = req.params
+    
+    const user = await userService.getUserProfile(parseInt(user_id))
+    
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: user
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * Update user profile by Admin
+ * @param {number} req.params.user_id - User ID
+ * @param {Object} req.body - { full_name, phone, role }
+ * @returns {Object} - { success: boolean }
+ */
+const updateUserByAdmin = async (req, res, next) => {
+  try {
+    const { user_id } = req.params
+    const { full_name, phone, role } = req.body
+    
+    const updateData = { user_id: parseInt(user_id) }
+    
+    if (full_name) updateData.full_name = full_name
+    if (phone) updateData.phone = phone
+    
+    // Handle role updates
+    if (role) {
+      await User.update({ role }, { where: { user_id: parseInt(user_id) } })
+    }
+    
+    // Update basic profile
+    const result = await userService.updateUserProfile(updateData)
+    
+    res.status(StatusCodes.OK).json({
+      success: result,
+      message: 'User updated successfully by admin'
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * Reset user password by Admin
+ * @param {number} req.params.user_id - User ID
+ * @param {Object} req.body - { new_password }
+ * @returns {Object} - { success: boolean }
+ */
+const resetPasswordByAdmin = async (req, res, next) => {
+  try {
+    const { user_id } = req.params
+    const { new_password } = req.body
+    
+    const result = await userService.updatePassword(parseInt(user_id), new_password)
+    
+    res.status(StatusCodes.OK).json({
+      success: result,
+      message: 'Password reset successfully'
+    })
+  } catch (error) {
+    next(error)
+  }
 }
 
 export const userController = {
-  updateUser,
-  addAddress,
-  updateAddress,
-  deleteAddress,
-  // Admin controllers
+  // User Profile
+  getProfile,
+  updateProfile,
+  changePassword,
+  // Admin
   getAllUsers,
-  getUserDetail,
-  updateUserByAdmin
+  searchUsers,
+  getUserById,
+  updateUserByAdmin,
+  resetPasswordByAdmin
 }

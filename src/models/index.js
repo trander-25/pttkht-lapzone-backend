@@ -1,15 +1,13 @@
-const User = require('./User')
-const Brand = require('./Brand')
-const Product = require('./Product')
-const ProductDetail = require('./ProductDetail')
-const Wishlist = require('./Wishlist')
-const WishlistItem = require('./WishlistItem')
-const Cart = require('./Cart')
-const CartItem = require('./CartItem')
-const Voucher = require('./Voucher')
-const Order = require('./Order')
-const OrderItem = require('./OrderItem')
-const Payment = require('./Payment')
+import User from './User.js'
+import Brand from './Brand.js'
+import Product from './Product.js'
+import ProductDetail from './ProductDetail.js'
+import Cart from './Cart.js'
+import CartItem from './CartItem.js'
+import Voucher from './Voucher.js'
+import Order from './Order.js'
+import OrderItem from './OrderItem.js'
+import Payment from './Payment.js'
 
 // Product Relationships
 Product.belongsTo(Brand, { foreignKey: 'brand_id', as: 'brand' })
@@ -17,24 +15,6 @@ Brand.hasMany(Product, { foreignKey: 'brand_id', as: 'products' })
 
 Product.hasOne(ProductDetail, { foreignKey: 'product_id', as: 'details' })
 ProductDetail.belongsTo(Product, { foreignKey: 'product_id', as: 'product' })
-
-// Wishlist Relationships
-User.hasOne(Wishlist, { foreignKey: 'user_id', as: 'wishlist' })
-Wishlist.belongsTo(User, { foreignKey: 'user_id', as: 'user' })
-
-Wishlist.belongsToMany(Product, {
-  through: WishlistItem,
-  foreignKey: 'wishlist_id',
-  otherKey: 'product_id',
-  as: 'products'
-})
-
-Product.belongsToMany(Wishlist, {
-  through: WishlistItem,
-  foreignKey: 'product_id',
-  otherKey: 'wishlist_id',
-  as: 'wishlists'
-})
 
 // Cart Relationships
 User.hasOne(Cart, { foreignKey: 'user_id', as: 'cart' })
@@ -89,13 +69,11 @@ Product.hasMany(OrderItem, { foreignKey: 'product_id', as: 'orderItems' })
 Order.hasOne(Payment, { foreignKey: 'order_id', as: 'payment' })
 Payment.belongsTo(Order, { foreignKey: 'order_id', as: 'order' })
 
-module.exports = {
+export {
   User,
   Brand,
   Product,
   ProductDetail,
-  Wishlist,
-  WishlistItem,
   Cart,
   CartItem,
   Voucher,

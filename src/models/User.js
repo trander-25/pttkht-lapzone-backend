@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize')
-const { sequelize } = require('../config/sequelize')
+import { DataTypes } from 'sequelize'
+import { sequelize } from '../config/sequelize.js'
 
 const User = sequelize.define('users', {
   user_id: {
@@ -27,11 +27,7 @@ const User = sequelize.define('users', {
   role: {
     type: DataTypes.ENUM('CUSTOMER', 'ADMIN'),
     defaultValue: 'CUSTOMER'
-  },
-  is_active: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
   }
 })
 
-module.exports = User
+export default User

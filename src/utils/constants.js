@@ -44,14 +44,6 @@ export const ORDER_PAGINATION = {
   MAX_LIMIT: 50
 }
 
-// Wishlist Pagination
-export const WISHLIST_PAGINATION = {
-  DEFAULT_PAGE: 1,
-  DEFAULT_LIMIT: 12,
-  MIN_LIMIT: 1,
-  MAX_LIMIT: 50
-}
-
 /**
  * Thời gian hết hạn của các loại token (tính bằng milliseconds)
  */

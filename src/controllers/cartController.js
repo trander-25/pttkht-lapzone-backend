@@ -1,129 +1,183 @@
+/**
+ * CART CONTROLLER
+ * Handles cart and cart items operations
+ */
+
 import { StatusCodes } from 'http-status-codes'
-import { cartService } from '~/services/cartService'
+import { cartService } from '../services/cartService'
+import { cartItemService } from '../services/cartItemService'
+import ApiError from '../utils/ApiError'
 
 /**
- * Thêm sản phẩm vào giỏ hàng
- * Kiểm tra stock và tự động tạo giỏ nếu user chưa có
- * Nếu sản phẩm đã có trong giỏ, tăng quantity
- * @route POST /api/v1/cart
- * @access Private (User phải đăng nhập)
+ * Get user's cart with all items
+ * GET /api/v1/cart
  */
-const addToCart = async (req, res, next) => {
+const getUserCart = async (req, res, next) => {
   try {
-    const userId = req.jwtDecoded._id
-
-    const cart = await cartService.addToCart(userId, req.body)
-
-    res.status(StatusCodes.OK).json(cart)
-  } catch (error) {
-    next(error)
-  }
-}
-
-/**
- * Lấy thông tin giỏ hàng của user
- * Bao gồm: items, selectedAmount
- * @route GET /api/v1/cart
- * @access Private (User phải đăng nhập)
- */
-const getCart = async (req, res, next) => {
-  try {
-    const userId = req.jwtDecoded._id
-
+    const userId = req.jwtDecoded.user_id
+    
+    // Get or create cart
     const cart = await cartService.getCart(userId)
-
-    res.status(StatusCodes.OK).json(cart)
+    
+    // Get all items in cart
+    const items = await cartItemService.getCartItems(cart.cart_id)
+    
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        cart,
+        items
+      }
+    })
   } catch (error) {
     next(error)
   }
 }
 
 /**
- * Cập nhật số lượng hoặc trạng thái chọn của item trong giỏ
- * Có thể cập nhật:
- * - quantity: Số lượng mới (kiểm tra stock)
- * - selected: true/false (để chọn checkout)
- * Tự động tính lại selectedAmount
- * @route PATCH /api/v1/cart/:productId
- * @access Private (User phải đăng nhập)
+ * Add product to cart
+ * POST /api/v1/cart/items
  */
-const updateCartItem = async (req, res, next) => {
+const addItemToCart = async (req, res, next) => {
   try {
-    const userId = req.jwtDecoded._id
-    const { productId } = req.params
-
-    const cart = await cartService.updateCartItem(userId, productId, req.body)
-
-    res.status(StatusCodes.OK).json(cart)
+    const userId = req.jwtDecoded.user_id
+    const { product_id, quantity } = req.body
+    
+    if (!product_id) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Product ID is required')
+    }
+    
+    // Get or create cart
+    const cart = await cartService.getCart(userId)
+    
+    // Check if item already exists
+    const exists = await cartItemService.checkItemExists(cart.cart_id, product_id)
+    
+    if (exists) {
+      // Update quantity
+      const result = await cartItemService.updateItemQuantity({
+        cart_id: cart.cart_id,
+        product_id,
+        quantity: quantity || 1
+      })
+      
+      res.status(StatusCodes.OK).json({
+        success: result,
+        message: 'Cart item quantity updated'
+      })
+    } else {
+      // Insert new item
+      const result = await cartItemService.insertCartItem({
+        cart_id: cart.cart_id,
+        product_id,
+        quantity: quantity || 1
+      })
+      
+      res.status(StatusCodes.CREATED).json({
+        success: result,
+        message: 'Product added to cart'
+      })
+    }
   } catch (error) {
     next(error)
   }
 }
 
 /**
- * Xóa một sản phẩm khỏi giỏ hàng
- * Tự động cập nhật lại selectedAmount
- * @route DELETE /api/v1/cart/:productId
- * @access Private (User phải đăng nhập)
+ * Update item quantity in cart
+ * PUT /api/v1/cart/items/:product_id
  */
-const deleteCartItem = async (req, res, next) => {
+const updateCartItemQuantity = async (req, res, next) => {
   try {
-    const userId = req.jwtDecoded._id
-    const { productId } = req.params
-
-    const cart = await cartService.deleteCartItem(userId, productId)
-
-    res.status(StatusCodes.OK).json(cart)
+    const userId = req.jwtDecoded.user_id
+    const { product_id } = req.params
+    const { quantity } = req.body
+    
+    if (!quantity || quantity < 1) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Valid quantity is required')
+    }
+    
+    // Get cart
+    const cart = await cartService.getCart(userId)
+    
+    // Update quantity
+    const result = await cartItemService.updateItemQuantity({
+      cart_id: cart.cart_id,
+      product_id: parseInt(product_id),
+      quantity
+    })
+    
+    res.status(StatusCodes.OK).json({
+      success: result,
+      message: 'Cart item quantity updated'
+    })
   } catch (error) {
     next(error)
   }
 }
 
 /**
- * Xóa tất cả các item đã chọn (selected=true)
- * Sử dụng khi user muốn xóa nhiều sản phẩm cùng lúc
- * @route DELETE /api/v1/cart/selected
- * @access Private (User phải đăng nhập)
+ * Remove item from cart
+ * DELETE /api/v1/cart/items/:product_id
  */
-const deleteSelectedCartItems = async (req, res, next) => {
+const removeItemFromCart = async (req, res, next) => {
   try {
-    const userId = req.jwtDecoded._id
-
-    const cart = await cartService.deleteSelectedCartItems(userId)
-
-    res.status(StatusCodes.OK).json(cart)
+    const userId = req.jwtDecoded.user_id
+    const { product_id } = req.params
+    
+    // Get cart
+    const cart = await cartService.getCart(userId)
+    
+    // Delete item
+    const result = await cartItemService.deleteCartItem({
+      cart_id: cart.cart_id,
+      product_id: parseInt(product_id)
+    })
+    
+    res.status(StatusCodes.OK).json({
+      success: result,
+      message: 'Product removed from cart'
+    })
   } catch (error) {
     next(error)
   }
 }
 
 /**
- * Kiểm tra tình trạng stock của tất cả items trong giỏ
- * Kiểm tra:
- * - Sản phẩm còn tồn tại không (UNAVAILABLE)
- * - Stock có đủ không (INSUFFICIENT_STOCK)
- * - Giá có thay đổi không (PRICE_CHANGED)
- * Sử dụng trước khi checkout
- * @route GET /api/v1/cart/validate-stock
- * @access Private (User phải đăng nhập)
+ * Clear all items from cart
+ * DELETE /api/v1/cart
  */
-const validateCartStock = async (req, res, next) => {
+const clearCart = async (req, res, next) => {
   try {
-    const userId = req.jwtDecoded._id
-
-    const result = await cartService.validateCartStock(userId)
-
-    res.status(StatusCodes.OK).json(result)
+    const userId = req.jwtDecoded.user_id
+    
+    // Get cart
+    const cart = await cartService.getCart(userId)
+    
+    // Get all items
+    const items = await cartItemService.getCartItems(cart.cart_id)
+    
+    // Delete all items
+    for (const item of items) {
+      await cartItemService.deleteCartItem({
+        cart_id: cart.cart_id,
+        product_id: item.product_id
+      })
+    }
+    
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Cart cleared successfully'
+    })
   } catch (error) {
     next(error)
   }
 }
 
 export const cartController = {
-  addToCart,
-  getCart,
-  updateCartItem,
-  deleteCartItem,
-  deleteSelectedCartItems,
-  validateCartStock
+  getUserCart,
+  addItemToCart,
+  updateCartItemQuantity,
+  removeItemFromCart,
+  clearCart
 }

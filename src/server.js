@@ -8,7 +8,6 @@ import { connectDB } from '~/config/sequelize'
 import { env } from '~/config/environment'
 import { APIs_V1 } from '~/routes/v1/index'
 import { errorHandlingMiddleware } from '~/middlewares/errorHandlingMiddleware'
-import { requestLogger, errorLogger, notFoundLogger } from '~/middlewares/loggingMiddleware'
 import cors from 'cors'
 import { corsOptions } from './config/cors'
 import cookieParser from 'cookie-parser'
@@ -34,17 +33,13 @@ const START_SERVER = () => {
   // Parse JSON
   app.use(express.json())
 
-  // Logging middleware
-  app.use(requestLogger)
-
   // API Routes
   app.use('/api/v1', APIs_V1)
 
   // 404 handler
-  app.use(notFoundLogger)
-
-  // Error logging
-  app.use(errorLogger)
+  app.use((req, res) => {
+    res.status(404).json({ message: 'Route not found' })
+  })
 
   // Error handling
   app.use(errorHandlingMiddleware)
@@ -52,7 +47,7 @@ const START_SERVER = () => {
   // Start server
   const PORT = env.LOCAL_DEV_APP_PORT || 8020
   const HOST = env.LOCAL_DEV_APP_HOST || 'localhost'
-  
+
   app.listen(PORT, HOST, () => {
     console.log(`🚀 Server running at http://${HOST}:${PORT}`)
     console.log(`✅ API ready at http://${HOST}:${PORT}/api/v1`)
@@ -67,7 +62,7 @@ const START_SERVER = () => {
     console.log('✅ MySQL connected!')
 
     console.log('Loading models...')
-    require('~/models')
+    await import('./models/index.js')
     console.log('✅ Models loaded!')
 
     START_SERVER()

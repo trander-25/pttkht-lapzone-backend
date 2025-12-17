@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize')
-const { sequelize } = require('../config/sequelize')
+import { DataTypes } from 'sequelize'
+import { sequelize } from '../config/sequelize.js'
 
 const Payment = sequelize.define('payments', {
   payment_id: {
@@ -25,4 +25,4 @@ const Payment = sequelize.define('payments', {
   }
 })
 
-module.exports = Payment
+export default Payment
