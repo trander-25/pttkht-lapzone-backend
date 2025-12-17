@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize')
-const { sequelize } = require('../config/sequelize')
+import { DataTypes } from 'sequelize'
+import { sequelize } from '../config/sequelize.js'
 
 const Voucher = sequelize.define('vouchers', {
   voucher_id: {
@@ -34,4 +34,4 @@ const Voucher = sequelize.define('vouchers', {
   }
 })
 
-module.exports = Voucher
+export default Voucher

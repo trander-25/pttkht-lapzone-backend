@@ -1,5 +1,5 @@
-const { Sequelize } = require('sequelize');
-const { env } = require('./environment');
+import { Sequelize } from 'sequelize'
+import { env } from './environment.js'
 
 const sequelize = new Sequelize(
   env.MYSQL_DATABASE || 'lapzone',
@@ -22,19 +22,20 @@ const sequelize = new Sequelize(
       freezeTableName: true
     }
   }
-);
+)
 
 const connectDB = async () => {
   try {
-    await sequelize.authenticate();
-    console.log('✅ MySQL connected successfully');
+    await sequelize.authenticate()
+    console.log('✅ MySQL connected successfully')
     
-    // Sync models with database (không tạo lại bảng vì đã có rồi)
-    // await sequelize.sync({ alter: false });
+    // Sync models with database
+    await sequelize.sync({ alter: true })
+    console.log('✅ Database tables synced')
   } catch (error) {
-    console.error('❌ MySQL connection failed:', error);
-    process.exit(1);
+    console.error('❌ MySQL connection failed:', error)
+    process.exit(1)
   }
-};
+}
 
-module.exports = { sequelize, connectDB };
+export { sequelize, connectDB }

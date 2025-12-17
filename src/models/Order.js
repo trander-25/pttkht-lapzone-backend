@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize')
-const { sequelize } = require('../config/sequelize')
+import { DataTypes } from 'sequelize'
+import { sequelize } from '../config/sequelize.js'
 
 const Order = sequelize.define('orders', {
   order_id: {
@@ -41,4 +41,4 @@ const Order = sequelize.define('orders', {
   }
 })
 
-module.exports = Order
+export default Order
