@@ -8,6 +8,7 @@ import { analyticRoute } from './analyticRoute'
 import { paymentRoute } from './paymentRoute'
 import { manageOrderRoute } from './manageOrderRoute'
 import { manageProductRoute } from './manageProductRoute'
+import { manageUserRoute } from './manageUserRoute'
 
 const Router = express.Router()
 
@@ -38,5 +39,8 @@ Router.use('/manage/orders', manageOrderRoute)
 
 // Admin - Manage Product APIs
 Router.use('/manage/products', manageProductRoute)
+
+// Admin - Manage User APIs
+Router.use('/manage/users', manageUserRoute)
 
 export const APIs_V1 = Router
