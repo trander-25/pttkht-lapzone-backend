@@ -12,7 +12,6 @@ import { cartItemService } from '../services/cartItemService'
 import { productService } from '../services/productService'
 import { voucherService } from '../services/voucherService'
 import ApiError from '../utils/ApiError'
-import { Order, Product, Brand, ProductDetail } from '../models/index.js'
 import { env } from '../config/environment.js'
 
 /**
@@ -32,16 +31,8 @@ const checkoutPreview = async (req, res, next) => {
     const checkoutItems = []
     
     for (const item of items) {
-      const product = await Product.findByPk(item.product_id, {
-        include: [
-          { model: Brand, as: 'brand', attributes: ['brand_name'] },
-          { model: ProductDetail, as: 'details' }
-        ]
-      })
-      
-      if (!product) {
-        throw new ApiError(StatusCodes.NOT_FOUND, `Product ${item.product_id} not found`)
-      }
+      const productResult = await productService.getProduct(item.product_id, { include_brand: true })
+      const product = productResult.product
       
       if (product.stock < item.quantity) {
         throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock for ${product.product_name}`)
@@ -50,7 +41,7 @@ const checkoutPreview = async (req, res, next) => {
       checkoutItems.push({
         product_id: product.product_id,
         quantity: item.quantity,
-        product: product.toJSON()
+        product: product
       })
     }
     
@@ -67,7 +58,7 @@ const checkoutPreview = async (req, res, next) => {
       totalAmount += itemTotal
       
       // Flatten brand data
-      const { brand, details, ...productRest } = product
+      const { brand, ...productRest } = product
       
       orderPreview.items.push({
         product_id: product.product_id,
@@ -78,7 +69,6 @@ const checkoutPreview = async (req, res, next) => {
         item_total: itemTotal,
         image: product.image,
         warranty_month: product.warranty_month,
-        details: details || null,
         ...productRest
       })
     }
@@ -148,17 +138,13 @@ const createOrder = async (req, res, next) => {
     const orderItems = []
     
     for (const item of items) {
-      const product = await Product.findByPk(item.product_id)
+      const stockCheck = await productService.checkStock(item.product_id, item.quantity)
       
-      if (!product) {
-        throw new ApiError(StatusCodes.NOT_FOUND, `Product ${item.product_id} not found`)
+      if (!stockCheck.available) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock for product ${item.product_id}. Available: ${stockCheck.availableStock}`)
       }
       
-      if (product.stock < item.quantity) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock for ${product.product_name}`)
-      }
-      
-      const price = parseFloat(product.price)
+      const price = parseFloat(stockCheck.product.price)
       totalAmount += price * item.quantity
       
       orderItems.push({
@@ -182,7 +168,7 @@ const createOrder = async (req, res, next) => {
     const finalAmount = totalAmount - discount
     
     // Create order
-    const result = await orderService.insertOrder({
+    const newOrder = await orderService.insertOrder({
       user_id: userId,
       receiver_name,
       phone,
@@ -193,13 +179,7 @@ const createOrder = async (req, res, next) => {
       voucher_id: voucherId
     })
     
-    if (result) {
-      // Get the newly created order
-      const newOrder = await Order.findOne({
-        where: { user_id: userId },
-        order: [['order_id', 'DESC']]
-      })
-      
+    if (newOrder) {
       // Insert order items
       const itemsWithOrderId = orderItems.map(item => ({
         ...item,
@@ -207,14 +187,13 @@ const createOrder = async (req, res, next) => {
       }))
       
       await orderItemService.insertOrderItems(itemsWithOrderId)
-            // Decrease product stock
+      
+      // Decrease product stock
       for (const item of orderItems) {
-        const product = await Product.findByPk(item.product_id)
-        await product.update({
-          stock: product.stock - item.quantity
-        })
+        await productService.decrementStock(item.product_id, item.quantity)
       }
-            // Increment voucher usage count if voucher was used
+      
+      // Increment voucher usage count if voucher was used
       if (voucherId) {
         await voucherService.incrementUsageCount(voucherId)
       }
@@ -236,6 +215,11 @@ const createOrder = async (req, res, next) => {
             amount: finalAmount,
             redirectUrl: `${env.WEBSITE_DOMAIN_DEVELOPMENT}/payment/result`,
             ipnUrl: `${env.WEBSITE_DOMAIN_DEVELOPMENT}/api/v1/payment/momo/callback`
+          })
+          
+          // Update payment record with payment URL
+          await paymentService.updatePayment(newOrder.order_id, {
+            payment_url: momoResponse.payUrl
           })
           
           return res.status(StatusCodes.CREATED).json({
@@ -367,12 +351,7 @@ const cancelOrder = async (req, res, next) => {
     // Restore product stock
     const items = await orderItemService.getOrderItems(parseInt(order_id))
     for (const item of items) {
-      const product = await Product.findByPk(item.product_id)
-      if (product) {
-        await product.update({
-          stock: product.stock + item.quantity
-        })
-      }
+      await productService.incrementStock(item.product_id, item.quantity)
     }
     
     const result = await orderService.updateOrderStatus(parseInt(order_id), 'CANCELLED')

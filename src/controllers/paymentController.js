@@ -39,8 +39,7 @@ const handleMoMoCallback = async (req, res, next) => {
     if (callbackData.resultCode === 0) {
       // Update payment status to PAID
       await paymentService.updatePayment(orderId, {
-        payment_status: 'PAID',
-        transaction_id: callbackData.transId
+        payment_status: 'PAID'
       })
       
       // Update order status to CONFIRMED

@@ -38,6 +38,34 @@ const Product = sequelize.define('products', {
   is_show: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
+  },
+  cpu: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  ram: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  storage: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  gpu: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  screen: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  weight: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  battery: {
+    type: DataTypes.STRING(100),
+    allowNull: true
   }
 })
 

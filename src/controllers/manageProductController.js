@@ -4,11 +4,8 @@
 
 import { StatusCodes } from 'http-status-codes'
 import { productService } from '../services/productService'
-import { productDetailService } from '../services/productDetailService'
 import { CloudinaryProvider } from '../providers/CloudinaryProvider'
 import ApiError from '../utils/ApiError'
-import { Product, ProductDetail, Brand } from '../models/index'
-import { Op } from 'sequelize'
 
 /**
  * Get all products (including hidden ones)
@@ -16,13 +13,7 @@ import { Op } from 'sequelize'
  */
 const getAllProducts = async (req, res, next) => {
   try {
-    const products = await Product.findAll({
-      include: [
-        { model: Brand, as: 'brand' },
-        { model: ProductDetail, as: 'details' }
-      ],
-      order: [['product_id', 'DESC']]
-    })
+    const products = await productService.getAllProductsForAdmin()
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -45,18 +36,7 @@ const searchProducts = async (req, res, next) => {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Keyword is required')
     }
 
-    const products = await Product.findAll({
-      where: {
-        [Op.or]: [
-          { product_name: { [Op.like]: `%${keyword}%` } },
-          { description: { [Op.like]: `%${keyword}%` } }
-        ]
-      },
-      include: [
-        { model: Brand, as: 'brand' },
-        { model: ProductDetail, as: 'details' }
-      ]
-    })
+    const products = await productService.searchProductsForAdmin(keyword)
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -130,22 +110,15 @@ const createProduct = async (req, res, next) => {
       stock,
       image: imageUrl,
       description,
-      warranty_month
+      warranty_month,
+      cpu,
+      ram,
+      storage,
+      gpu,
+      screen,
+      weight,
+      battery
     })
-
-    // Insert product details if provided
-    if (cpu || ram || storage || gpu || screen || weight || battery) {
-      await productDetailService.insertProductDetails({
-        product_id: productId,
-        cpu,
-        ram,
-        storage,
-        gpu,
-        screen,
-        weight,
-        battery
-      })
-    }
 
     res.status(StatusCodes.CREATED).json({
       success: true,
@@ -185,6 +158,23 @@ const updateProduct = async (req, res, next) => {
     // Handle image upload to Cloudinary if new file provided
     let imageUrl = image // Keep existing URL if no new file
     if (req.file) {
+      // Get current product to retrieve old image URL
+      const currentProduct = await productService.getProduct(parseInt(product_id))
+      
+      // Delete old image from Cloudinary if exists
+      if (currentProduct.product.image) {
+        const oldPublicId = CloudinaryProvider.extractPublicId(currentProduct.product.image)
+        if (oldPublicId) {
+          try {
+            await CloudinaryProvider.deleteImage(oldPublicId)
+          } catch (deleteError) {
+            // Log error but continue with upload (old image might already be deleted)
+            console.warn('Failed to delete old image:', deleteError.message)
+          }
+        }
+      }
+      
+      // Upload new image
       const uploadResult = await CloudinaryProvider.streamUpload(req.file.buffer, 'products')
       imageUrl = uploadResult.secure_url
     }
@@ -199,22 +189,15 @@ const updateProduct = async (req, res, next) => {
       image: imageUrl,
       description,
       warranty_month,
-      is_show
+      is_show,
+      cpu,
+      ram,
+      storage,
+      gpu,
+      screen,
+      weight,
+      battery
     })
-
-    // Update product details if provided
-    if (cpu || ram || storage || gpu || screen || weight || battery) {
-      await productDetailService.updateProductDetails({
-        product_id: parseInt(product_id),
-        cpu,
-        ram,
-        storage,
-        gpu,
-        screen,
-        weight,
-        battery
-      })
-    }
 
     res.status(StatusCodes.OK).json({
       success: productUpdated,

@@ -10,11 +10,11 @@ import { StatusCodes } from 'http-status-codes'
 /**
  * Creates a new order record
  * @param {Object} order - Order data { user_id, receiver_name, phone, shipment_address, total_amount, order_status, order_date, voucher_id }
- * @returns {Promise<Boolean>} - True if successful
+ * @returns {Promise<Object>} - Created order object
  */
 const insertOrder = async (order) => {
   try {
-    await Order.create({
+    const newOrder = await Order.create({
       user_id: order.user_id,
       receiver_name: order.receiver_name,
       phone: order.phone,
@@ -25,7 +25,7 @@ const insertOrder = async (order) => {
       voucher_id: order.voucher_id || null
     })
     
-    return true
+    return newOrder
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error inserting order')
   }

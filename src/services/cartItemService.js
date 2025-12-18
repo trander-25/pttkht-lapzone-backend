@@ -3,7 +3,7 @@
  * Implements exact functions from CartItems entity specification
  */
 
-import { CartItem, Product, Brand, ProductDetail } from '../models/index'
+import { CartItem, Product, Brand } from '../models/index'
 import ApiError from '../utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 

@@ -12,7 +12,7 @@ import { env } from '../config/environment'
 
 /**
  * Records a new payment transaction
- * @param {Object} payment - Payment data { order_id, method, amount, payment_status }
+ * @param {Object} payment - Payment data { order_id, method, amount, payment_status, payment_url }
  * @returns {Promise<Boolean>} - True if successful
  */
 const insertPayment = async (payment) => {
@@ -21,7 +21,8 @@ const insertPayment = async (payment) => {
       order_id: payment.order_id,
       method: payment.method,
       amount: payment.amount,
-      payment_status: payment.payment_status || 'PENDING'
+      payment_status: payment.payment_status || 'PENDING',
+      payment_url: payment.payment_url || null
     })
     
     return true

@@ -1,7 +1,10 @@
 import multer from 'multer'
-import { LIMIT_COMMON_FILE_SIZE, ALLOW_COMMON_FILE_TYPES } from '~/utils/validators'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
+
+// File upload limits and allowed types
+const LIMIT_COMMON_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOW_COMMON_FILE_TYPES = ['image/jpeg', 'image/jpg', 'image/png']
 
 const customFileFilter = (req, file, callback) => {
   if (!ALLOW_COMMON_FILE_TYPES.includes(file.mimetype)) {
