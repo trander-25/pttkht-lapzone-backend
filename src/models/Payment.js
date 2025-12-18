@@ -23,8 +23,8 @@ const Payment = sequelize.define('payments', {
     type: DataTypes.ENUM('PENDING', 'PAID'),
     defaultValue: 'PENDING'
   },
-  transaction_id: {
-    type: DataTypes.STRING(100),
+  payment_url: {
+    type: DataTypes.TEXT,
     allowNull: true
   }
 })

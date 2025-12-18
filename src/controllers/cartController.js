@@ -6,7 +6,7 @@
 import { StatusCodes } from 'http-status-codes'
 import { cartService } from '../services/cartService'
 import { cartItemService } from '../services/cartItemService'
-import { CartItem, Product } from '../models/index'
+import { productService } from '../services/productService'
 import ApiError from '../utils/ApiError'
 
 /**
@@ -92,14 +92,10 @@ const updateItemQuantity = async (req, res, next) => {
     const cart = await cartService.getCart(userId)
     
     // Check stock availability
-    const product = await Product.findByPk(parseInt(product_id))
+    const stockCheck = await productService.checkStock(parseInt(product_id), quantity)
     
-    if (!product) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
-    }
-    
-    if (product.stock < quantity) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock. Only ${product.stock} items available`)
+    if (!stockCheck.available) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock. Only ${stockCheck.availableStock} items available`)
     }
     
     // Update quantity

@@ -3,7 +3,7 @@
  * Implements exact functions from OrderItems entity specification
  */
 
-import { OrderItem, Product, Brand, ProductDetail } from '../models/index'
+import { OrderItem, Product, Brand } from '../models/index'
 import ApiError from '../utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 
@@ -42,8 +42,7 @@ const getOrderItems = async (order_id) => {
           model: Product,
           as: 'product',
           include: [
-            { model: Brand, as: 'brand' },
-            { model: ProductDetail, as: 'details' }
+            { model: Brand, as: 'brand' }
           ]
         }
       ]

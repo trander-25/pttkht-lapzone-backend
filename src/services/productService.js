@@ -3,7 +3,7 @@
  * Implements exact functions from Product entity specification
  */
 
-import { Product, ProductDetail, Brand } from '../models/index'
+import { Product, Brand } from '../models/index'
 import ApiError from '../utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { Op } from 'sequelize'
@@ -68,8 +68,7 @@ const getProduct = async (product_id) => {
   try {
     const product = await Product.findByPk(product_id, {
       include: [
-        { model: Brand, as: 'brand' },
-        { model: ProductDetail, as: 'details' }
+        { model: Brand, as: 'brand' }
       ]
     })
     
@@ -104,8 +103,7 @@ const searchProducts = async (keyword) => {
         ]
       },
       include: [
-        { model: Brand, as: 'brand' },
-        { model: ProductDetail, as: 'details' }
+        { model: Brand, as: 'brand' }
       ]
     })
     
@@ -117,7 +115,7 @@ const searchProducts = async (keyword) => {
 
 /**
  * Adds a new product (Admin)
- * @param {Object} product - Product data { product_name, brand_id, price, stock, image, description, warranty_month }
+ * @param {Object} product - Product data { product_name, brand_id, price, stock, image, description, warranty_month, cpu, ram, storage, gpu, screen, weight, battery }
  * @returns {Promise<number>} - Created product ID
  */
 const insertProduct = async (product) => {
@@ -130,7 +128,14 @@ const insertProduct = async (product) => {
       image: product.image || null,
       description: product.description || null,
       warranty_month: product.warranty_month || 12,
-      is_show: true
+      is_show: true,
+      cpu: product.cpu || null,
+      ram: product.ram || null,
+      storage: product.storage || null,
+      gpu: product.gpu || null,
+      screen: product.screen || null,
+      weight: product.weight || null,
+      battery: product.battery || null
     })
     
     return newProduct.product_id
@@ -141,7 +146,7 @@ const insertProduct = async (product) => {
 
 /**
  * Updates product information (Admin)
- * @param {Object} product - Product data { product_id, product_name, brand_id, price, stock, image, description, warranty_month, is_show }
+ * @param {Object} product - Product data { product_id, product_name, brand_id, price, stock, image, description, warranty_month, is_show, cpu, ram, storage, gpu, screen, weight, battery }
  * @returns {Promise<Boolean>} - True if successful
  */
 const updateProduct = async (product) => {
@@ -156,6 +161,13 @@ const updateProduct = async (product) => {
     if (product.description) updateData.description = product.description
     if (product.warranty_month) updateData.warranty_month = product.warranty_month
     if (product.is_show !== undefined) updateData.is_show = product.is_show
+    if (product.cpu !== undefined) updateData.cpu = product.cpu
+    if (product.ram !== undefined) updateData.ram = product.ram
+    if (product.storage !== undefined) updateData.storage = product.storage
+    if (product.gpu !== undefined) updateData.gpu = product.gpu
+    if (product.screen !== undefined) updateData.screen = product.screen
+    if (product.weight !== undefined) updateData.weight = product.weight
+    if (product.battery !== undefined) updateData.battery = product.battery
     
     const [updated] = await Product.update(updateData, {
       where: { product_id: product.product_id }
@@ -185,11 +197,140 @@ const deleteProduct = async (product_id) => {
   }
 }
 
+/**
+ * Checks if product has enough stock
+ * @param {number} product_id - Product ID
+ * @param {number} required_quantity - Required quantity
+ * @returns {Promise<Object>} - { available: boolean, product: Object }
+ */
+const checkStock = async (product_id, required_quantity) => {
+  try {
+    const product = await Product.findByPk(product_id)
+    
+    if (!product) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
+    }
+    
+    return {
+      available: product.stock >= required_quantity,
+      product: product.toJSON(),
+      availableStock: product.stock
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error checking stock')
+  }
+}
+
+/**
+ * Decrements product stock
+ * @param {number} product_id - Product ID
+ * @param {number} quantity - Quantity to decrement
+ * @returns {Promise<Boolean>} - True if successful
+ */
+const decrementStock = async (product_id, quantity) => {
+  try {
+    const product = await Product.findByPk(product_id)
+    
+    if (!product) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
+    }
+    
+    if (product.stock < quantity) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock for ${product.product_name}`)
+    }
+    
+    await product.update({
+      stock: product.stock - quantity
+    })
+    
+    return true
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error decrementing stock')
+  }
+}
+
+/**
+ * Increments product stock (for order cancellation/return)
+ * @param {number} product_id - Product ID
+ * @param {number} quantity - Quantity to increment
+ * @returns {Promise<Boolean>} - True if successful
+ */
+const incrementStock = async (product_id, quantity) => {
+  try {
+    const product = await Product.findByPk(product_id)
+    
+    if (!product) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
+    }
+    
+    await product.update({
+      stock: product.stock + quantity
+    })
+    
+    return true
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error incrementing stock')
+  }
+}
+
+/**
+ * Gets all products for admin (including hidden products)
+ * @returns {Promise<Array>} - List of all products
+ */
+const getAllProductsForAdmin = async () => {
+  try {
+    const products = await Product.findAll({
+      include: [
+        { model: Brand, as: 'brand' }
+      ],
+      order: [['product_id', 'DESC']]
+    })
+    
+    return products
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting products for admin')
+  }
+}
+
+/**
+ * Searches products for admin by keyword
+ * @param {string} keyword - Search keyword
+ * @returns {Promise<Array>} - List of matching products
+ */
+const searchProductsForAdmin = async (keyword) => {
+  try {
+    const products = await Product.findAll({
+      where: {
+        [Op.or]: [
+          { product_name: { [Op.like]: `%${keyword}%` } },
+          { description: { [Op.like]: `%${keyword}%` } }
+        ]
+      },
+      include: [
+        { model: Brand, as: 'brand' }
+      ],
+      order: [['product_id', 'DESC']]
+    })
+    
+    return products
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error searching products for admin')
+  }
+}
+
 export const productService = {
   getAllProducts,
   getProduct,
   searchProducts,
   insertProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  checkStock,
+  decrementStock,
+  incrementStock,
+  getAllProductsForAdmin,
+  searchProductsForAdmin
 }

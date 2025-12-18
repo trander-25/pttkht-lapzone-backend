@@ -7,7 +7,6 @@ import { StatusCodes } from 'http-status-codes'
 import { userService } from '../services/userService'
 import { JwtProvider } from '../providers/JwtProvider'
 import ApiError from '../utils/ApiError'
-import { User } from '../models/index.js'
 import { env } from '../config/environment.js'
 
 /**
@@ -26,11 +25,8 @@ const signin = async (req, res, next) => {
       throw new ApiError(StatusCodes.UNAUTHORIZED, 'Invalid email or password')
     }
     
-    // Get user info
-    const user = await User.findOne({
-      where: { email },
-      attributes: { exclude: ['password'] }
-    })
+    // Get user info from service
+    const user = await userService.getUserByEmail(email)
     
     // Generate JWT tokens
     const tokenPayload = {

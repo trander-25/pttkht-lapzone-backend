@@ -38,4 +38,49 @@ const streamUpload = (fileBuffer, folderName) => {
   })
 }
 
-export const CloudinaryProvider = { streamUpload }
+/**
+ * Xóa file trên Cloudinary bằng public_id
+ * @param {string} publicId - Public ID của file cần xóa (extract từ URL)
+ * @returns {Promise<object>} Kết quả xóa file
+ */
+const deleteImage = (publicId) => {
+  return new Promise((resolve, reject) => {
+    cloudinaryV2.uploader.destroy(publicId, (err, result) => {
+      if (err) reject(err)
+      else resolve(result)
+    })
+  })
+}
+
+/**
+ * Trích xuất public_id từ Cloudinary URL
+ * VD: https://res.cloudinary.com/demo/image/upload/v1234567890/products/abc123.jpg
+ * => products/abc123
+ * @param {string} imageUrl - URL đầy đủ của ảnh trên Cloudinary
+ * @returns {string|null} Public ID hoặc null nếu không phải URL Cloudinary
+ */
+const extractPublicId = (imageUrl) => {
+  if (!imageUrl || !imageUrl.includes('cloudinary.com')) {
+    return null
+  }
+  
+  try {
+    // URL format: https://res.cloudinary.com/{cloud_name}/image/upload/v{version}/{folder}/{public_id}.{ext}
+    const parts = imageUrl.split('/upload/')
+    if (parts.length < 2) return null
+    
+    // Lấy phần sau /upload/
+    const pathParts = parts[1].split('/')
+    // Bỏ version (vXXXXXXXXXX)
+    const withoutVersion = pathParts.slice(1)
+    // Join lại và bỏ extension
+    const publicIdWithExt = withoutVersion.join('/')
+    const publicId = publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'))
+    
+    return publicId
+  } catch (error) {
+    return null
+  }
+}
+
+export const CloudinaryProvider = { streamUpload, deleteImage, extractPublicId }
