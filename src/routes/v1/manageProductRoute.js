@@ -26,13 +26,13 @@ Router.get('/search', manageProductController.searchProducts)
 Router.get('/:product_id', manageProductController.getProductDetails)
 
 // POST /api/v1/manage/products - Create new product
-Router.post('/', 
+Router.post('/',
   multerUploadMiddleware.upload.single('image'),
   manageProductController.createProduct
 )
 
 // PUT /api/v1/manage/products/:product_id - Update product
-Router.put('/:product_id', 
+Router.put('/:product_id',
   multerUploadMiddleware.upload.single('image'),
   manageProductController.updateProduct
 )

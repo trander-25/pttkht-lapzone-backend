@@ -1,5 +1,4 @@
 import User from './User.js'
-import Brand from './Brand.js'
 import Product from './Product.js'
 import Cart from './Cart.js'
 import CartItem from './CartItem.js'
@@ -7,10 +6,6 @@ import Voucher from './Voucher.js'
 import Order from './Order.js'
 import OrderItem from './OrderItem.js'
 import Payment from './Payment.js'
-
-// Product Relationships
-Product.belongsTo(Brand, { foreignKey: 'brand_id', as: 'brand' })
-Brand.hasMany(Product, { foreignKey: 'brand_id', as: 'products' })
 
 // Cart Relationships
 User.hasOne(Cart, { foreignKey: 'user_id', as: 'cart' })
@@ -67,7 +62,6 @@ Payment.belongsTo(Order, { foreignKey: 'order_id', as: 'order' })
 
 export {
   User,
-  Brand,
   Product,
   Cart,
   CartItem,

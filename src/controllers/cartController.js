@@ -5,7 +5,6 @@
 
 import { StatusCodes } from 'http-status-codes'
 import { cartService } from '../services/cartService'
-import { cartItemService } from '../services/cartItemService'
 import { productService } from '../services/productService'
 import ApiError from '../utils/ApiError'
 
@@ -21,7 +20,7 @@ const getCart = async (req, res, next) => {
     const cart = await cartService.getCart(userId)
     
     // Get all items in cart
-    const items = await cartItemService.getCartItems(cart.cart_id)
+    const items = await cartService.getCartItems(cart.cart_id)
     
     res.status(StatusCodes.OK).json({
       success: true,
@@ -52,14 +51,14 @@ const addItem = async (req, res, next) => {
     const cart = await cartService.getCart(userId)
     
     // Check if item already exists
-    const exists = await cartItemService.checkItemExists(cart.cart_id, product_id)
+    const exists = await cartService.checkItemExists(cart.cart_id, product_id)
     
     if (exists) {
       throw new ApiError(StatusCodes.CONFLICT, 'Product already exists in cart. Please update quantity instead.')
     }
     
     // Insert new item
-    const result = await cartItemService.insertCartItem({
+    const result = await cartService.insertCartItem({
       cart_id: cart.cart_id,
       product_id,
       quantity: quantity || 1
@@ -99,7 +98,7 @@ const updateItemQuantity = async (req, res, next) => {
     }
     
     // Update quantity
-    const result = await cartItemService.updateItemQuantity({
+    const result = await cartService.updateItemQuantity({
       cart_id: cart.cart_id,
       product_id: parseInt(product_id),
       quantity
@@ -127,7 +126,7 @@ const removeItem = async (req, res, next) => {
     const cart = await cartService.getCart(userId)
     
     // Delete item
-    const result = await cartItemService.deleteCartItem({
+    const result = await cartService.deleteCartItem({
       cart_id: cart.cart_id,
       product_id: parseInt(product_id)
     })
@@ -141,41 +140,9 @@ const removeItem = async (req, res, next) => {
   }
 }
 
-/**
- * Clear all items from cart
- * DELETE /api/v1/cart
- */
-const clearCart = async (req, res, next) => {
-  try {
-    const userId = req.jwtDecoded.user_id
-    
-    // Get cart
-    const cart = await cartService.getCart(userId)
-    
-    // Get all items
-    const items = await cartItemService.getCartItems(cart.cart_id)
-    
-    // Delete all items
-    for (const item of items) {
-      await cartItemService.deleteCartItem({
-        cart_id: cart.cart_id,
-        product_id: item.product_id
-      })
-    }
-    
-    res.status(StatusCodes.OK).json({
-      success: true,
-      message: 'Cart cleared successfully'
-    })
-  } catch (error) {
-    next(error)
-  }
-}
-
 export const cartController = {
   getCart,
   addItem,
   updateItemQuantity,
-  removeItem,
-  clearCart
+  removeItem
 }

@@ -11,8 +11,8 @@ const Product = sequelize.define('products', {
     type: DataTypes.STRING(255),
     allowNull: false
   },
-  brand_id: {
-    type: DataTypes.INTEGER,
+  brand: {
+    type: DataTypes.ENUM('LENOVO', 'ASUS', 'ACER', 'DELL', 'HP'),
     allowNull: true
   },
   price: {

@@ -3,7 +3,7 @@
  * Implements exact functions from Product entity specification
  */
 
-import { Product, Brand } from '../models/index'
+import { Product } from '../models/index'
 import ApiError from '../utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { Op } from 'sequelize'
@@ -20,27 +20,12 @@ const getAllProducts = async (page = 1, limit = 12) => {
     
     const { count, rows } = await Product.findAndCountAll({
       where: { is_show: true },
-      include: [
-        { 
-          model: Brand, 
-          as: 'brand',
-          attributes: ['brand_name']
-        }
-      ],
       order: [['product_id', 'DESC']],
       limit: limit,
       offset: offset
     })
     
-    // Flatten brand data to same level as product data
-    const formattedProducts = rows.map(product => {
-      const productData = product.toJSON()
-      const { brand, ...rest } = productData
-      return {
-        ...rest,
-        brand_name: brand?.brand_name || null
-      }
-    })
+    const formattedProducts = rows.map(product => product.toJSON())
     
     const totalPages = Math.ceil(count / limit)
     
@@ -66,17 +51,13 @@ const getAllProducts = async (page = 1, limit = 12) => {
  */
 const getProduct = async (product_id) => {
   try {
-    const product = await Product.findByPk(product_id, {
-      include: [
-        { model: Brand, as: 'brand' }
-      ]
-    })
+    const product = await Product.findByPk(product_id)
     
     if (!product) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
     }
     
-    return product
+    return { product: product.toJSON() }
   } catch (error) {
     if (error instanceof ApiError) throw error
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting product')
@@ -86,11 +67,15 @@ const getProduct = async (product_id) => {
 /**
  * Finds products matching the keyword
  * @param {string} keyword - Search keyword
- * @returns {Promise<Array>} - List of matching products
+ * @param {number} page - Page number
+ * @param {number} limit - Items per page
+ * @returns {Promise<Object>} - { products, pagination }
  */
-const searchProducts = async (keyword) => {
+const searchProducts = async (keyword, page = 1, limit = 12) => {
   try {
-    const products = await Product.findAll({
+    const offset = (page - 1) * limit
+    
+    const { count, rows } = await Product.findAndCountAll({
       where: {
         [Op.and]: [
           { is_show: true },
@@ -102,12 +87,23 @@ const searchProducts = async (keyword) => {
           }
         ]
       },
-      include: [
-        { model: Brand, as: 'brand' }
-      ]
+      order: [['product_id', 'DESC']],
+      limit: limit,
+      offset: offset
     })
     
-    return products
+    const totalPages = Math.ceil(count / limit)
+    
+    return {
+      products: rows,
+      pagination: {
+        total: count,
+        totalPages: totalPages,
+        currentPage: page,
+        limit: limit,
+        hasMore: page < totalPages
+      }
+    }
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error searching products')
   }
@@ -115,14 +111,14 @@ const searchProducts = async (keyword) => {
 
 /**
  * Adds a new product (Admin)
- * @param {Object} product - Product data { product_name, brand_id, price, stock, image, description, warranty_month, cpu, ram, storage, gpu, screen, weight, battery }
+ * @param {Object} product - Product data { product_name, brand, price, stock, image, description, warranty_month, cpu, ram, storage, gpu, screen, weight, battery }
  * @returns {Promise<number>} - Created product ID
  */
 const insertProduct = async (product) => {
   try {
     const newProduct = await Product.create({
       product_name: product.product_name,
-      brand_id: product.brand_id,
+      brand: product.brand,
       price: product.price,
       stock: product.stock || 0,
       image: product.image || null,
@@ -146,7 +142,7 @@ const insertProduct = async (product) => {
 
 /**
  * Updates product information (Admin)
- * @param {Object} product - Product data { product_id, product_name, brand_id, price, stock, image, description, warranty_month, is_show, cpu, ram, storage, gpu, screen, weight, battery }
+ * @param {Object} product - Product data { product_id, product_name, brand, price, stock, image, description, warranty_month, is_show, cpu, ram, storage, gpu, screen, weight, battery }
  * @returns {Promise<Boolean>} - True if successful
  */
 const updateProduct = async (product) => {
@@ -154,7 +150,7 @@ const updateProduct = async (product) => {
     const updateData = {}
     
     if (product.product_name) updateData.product_name = product.product_name
-    if (product.brand_id) updateData.brand_id = product.brand_id
+    if (product.brand) updateData.brand = product.brand
     if (product.price !== undefined) updateData.price = product.price
     if (product.stock !== undefined) updateData.stock = product.stock
     if (product.image) updateData.image = product.image
@@ -278,18 +274,32 @@ const incrementStock = async (product_id, quantity) => {
 
 /**
  * Gets all products for admin (including hidden products)
- * @returns {Promise<Array>} - List of all products
+ * @param {number} page - Page number
+ * @param {number} limit - Items per page
+ * @returns {Promise<Object>} - { products, pagination }
  */
-const getAllProductsForAdmin = async () => {
+const getAllProductsForAdmin = async (page = 1, limit = 12) => {
   try {
-    const products = await Product.findAll({
-      include: [
-        { model: Brand, as: 'brand' }
-      ],
-      order: [['product_id', 'DESC']]
+    const offset = (page - 1) * limit
+    
+    const { count, rows } = await Product.findAndCountAll({
+      order: [['product_id', 'DESC']],
+      limit: limit,
+      offset: offset
     })
     
-    return products
+    const totalPages = Math.ceil(count / limit)
+    
+    return {
+      products: rows,
+      pagination: {
+        total: count,
+        totalPages: totalPages,
+        currentPage: page,
+        limit: limit,
+        hasMore: page < totalPages
+      }
+    }
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting products for admin')
   }
@@ -298,24 +308,38 @@ const getAllProductsForAdmin = async () => {
 /**
  * Searches products for admin by keyword
  * @param {string} keyword - Search keyword
- * @returns {Promise<Array>} - List of matching products
+ * @param {number} page - Page number
+ * @param {number} limit - Items per page
+ * @returns {Promise<Object>} - { products, pagination }
  */
-const searchProductsForAdmin = async (keyword) => {
+const searchProductsForAdmin = async (keyword, page = 1, limit = 12) => {
   try {
-    const products = await Product.findAll({
+    const offset = (page - 1) * limit
+    
+    const { count, rows } = await Product.findAndCountAll({
       where: {
         [Op.or]: [
           { product_name: { [Op.like]: `%${keyword}%` } },
           { description: { [Op.like]: `%${keyword}%` } }
         ]
       },
-      include: [
-        { model: Brand, as: 'brand' }
-      ],
-      order: [['product_id', 'DESC']]
+      order: [['product_id', 'DESC']],
+      limit: limit,
+      offset: offset
     })
     
-    return products
+    const totalPages = Math.ceil(count / limit)
+    
+    return {
+      products: rows,
+      pagination: {
+        total: count,
+        totalPages: totalPages,
+        currentPage: page,
+        limit: limit,
+        hasMore: page < totalPages
+      }
+    }
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error searching products for admin')
   }
