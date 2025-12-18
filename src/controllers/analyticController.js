@@ -1,6 +1,5 @@
 /**
- * ANALYTIC CONTROLLER
- * Handles analytics and statistics operations
+ * ANALYTIC CONTROLLER - Order statistics and revenue analytics
  */
 
 import { StatusCodes } from 'http-status-codes'
@@ -8,11 +7,11 @@ import { orderService } from '../services/orderService'
 import ApiError from '../utils/ApiError'
 
 /**
- * Checks filter validity
- * @param {Object} filter - Filter conditions { start_date, end_date, status, etc }
+ * Validate filter conditions for analytics
+ * @param {Object} filter - Filter conditions { start_date, end_date, status }
  * @returns {boolean} - True if valid
  */
-const validateConditions = (filter) => {
+const validateFilter = (filter) => {
   if (filter.start_date && filter.end_date) {
     const startDate = new Date(filter.start_date)
     const endDate = new Date(filter.end_date)
@@ -30,11 +29,11 @@ const validateConditions = (filter) => {
 }
 
 /**
- * Fetches raw order data
+ * Fetch and filter orders based on criteria
  * @param {Object} filter - Filter conditions
- * @returns {Promise<Array>} - List of orders with payment info
+ * @returns {Promise<Array>} - Filtered orders
  */
-const sendQueryRequest = async (filter) => {
+const getFilteredOrders = async (filter) => {
   const orders = await orderService.getAllOrders()
   
   let filteredOrders = orders
@@ -65,36 +64,40 @@ const sendQueryRequest = async (filter) => {
 }
 
 /**
- * Calculates revenue statistics
- * @param {Array} raw_data - Raw order data
- * @returns {Object} - Revenue statistics
+ * Calculate order and revenue statistics
+ * @param {Array} orders - List of orders
+ * @returns {Object} - Calculated statistics
  */
-const processTheData = (raw_data) => {
+const calculateStatistics = (orders) => {
   const stats = {
-    total_orders: raw_data.length,
+    total_orders: orders.length,
     total_revenue: 0,
-    paid_orders: 0,
     pending_orders: 0,
-    cancelled_orders: 0,
     confirmed_orders: 0,
+    shipping_orders: 0,
+    completed_orders: 0,
+    cancelled_orders: 0,
     average_order_value: 0
   }
   
-  raw_data.forEach(order => {
+  orders.forEach(order => {
     stats.total_revenue += parseFloat(order.total_amount) || 0
 
     switch (order.order_status) {
-    case 'PAID':
-      stats.paid_orders++
-      break
     case 'PENDING':
       stats.pending_orders++
       break
-    case 'CANCELLED':
-      stats.cancelled_orders++
-      break
     case 'CONFIRMED':
       stats.confirmed_orders++
+      break
+    case 'SHIPPING':
+      stats.shipping_orders++
+      break
+    case 'COMPLETED':
+      stats.completed_orders++
+      break
+    case 'CANCELLED':
+      stats.cancelled_orders++
       break
     }
   })
@@ -107,8 +110,11 @@ const processTheData = (raw_data) => {
 }
 
 /**
- * Get revenue analytics
+ * Get revenue analytics with filters
  * GET /api/v1/analytics/revenue
+ * @query {string} start_date - Start date (YYYY-MM-DD)
+ * @query {string} end_date - End date (YYYY-MM-DD)
+ * @query {string} status - Order status filter
  */
 const getRevenueAnalytics = async (req, res, next) => {
   try {
@@ -118,16 +124,16 @@ const getRevenueAnalytics = async (req, res, next) => {
       status: req.query.status
     }
     
-    // Validate filter conditions
-    if (!validateConditions(filter)) {
+    // Validate filter
+    if (!validateFilter(filter)) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid filter conditions')
     }
     
-    // Fetch raw data
-    const rawData = await sendQueryRequest(filter)
+    // Fetch filtered orders
+    const orders = await getFilteredOrders(filter)
     
-    // Process and calculate statistics
-    const statistics = processTheData(rawData)
+    // Calculate statistics
+    const statistics = calculateStatistics(orders)
     
     res.status(StatusCodes.OK).json({
       success: true,
@@ -142,6 +148,8 @@ const getRevenueAnalytics = async (req, res, next) => {
 /**
  * Get order statistics by date range
  * GET /api/v1/analytics/orders
+ * @query {string} start_date - Start date (YYYY-MM-DD)
+ * @query {string} end_date - End date (YYYY-MM-DD)
  */
 const getOrderStatistics = async (req, res, next) => {
   try {
@@ -150,12 +158,12 @@ const getOrderStatistics = async (req, res, next) => {
       end_date: req.query.end_date
     }
     
-    if (!validateConditions(filter)) {
+    if (!validateFilter(filter)) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid filter conditions')
     }
     
-    const rawData = await sendQueryRequest(filter)
-    const statistics = processTheData(rawData)
+    const orders = await getFilteredOrders(filter)
+    const statistics = calculateStatistics(orders)
     
     res.status(StatusCodes.OK).json({
       success: true,
@@ -167,9 +175,6 @@ const getOrderStatistics = async (req, res, next) => {
 }
 
 export const analyticController = {
-  validateConditions,
-  sendQueryRequest,
-  processTheData,
   getRevenueAnalytics,
   getOrderStatistics
 }

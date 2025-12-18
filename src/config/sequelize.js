@@ -30,7 +30,7 @@ const connectDB = async () => {
     console.log('✅ MySQL connected successfully')
     
     // Sync models with database
-    await sequelize.sync({ alter: true })
+    await sequelize.sync()
     console.log('✅ Database tables synced')
   } catch (error) {
     console.error('❌ MySQL connection failed:', error)

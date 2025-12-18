@@ -21,14 +21,30 @@ const getCartItems = async (cart_id) => {
           model: Product,
           as: 'product',
           include: [
-            { model: Brand, as: 'brand' },
-            { model: ProductDetail, as: 'details' }
+            { 
+              model: Brand, 
+              as: 'brand',
+              attributes: ['brand_name']
+            }
           ]
         }
       ]
     })
-    
-    return items
+
+    // Flatten brand data
+    const formattedItems = items.map(item => {
+      const itemData = item.toJSON()
+      if (itemData.product) {
+        const { brand, ...productRest } = itemData.product
+        itemData.product = {
+          ...productRest,
+          brand_name: brand?.brand_name || null
+        }
+      }
+      return itemData
+    })
+
+    return formattedItems
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting cart items')
   }

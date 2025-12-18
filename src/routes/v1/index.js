@@ -1,12 +1,13 @@
 import express from 'express'
 import { StatusCodes } from 'http-status-codes'
-import { userRoute } from './userRoute'
 import { authRoute } from './authRoute'
 import { productRoute } from './productRoute'
 import { cartRoute } from './cartRoute'
 import { orderRoute } from './orderRoute'
 import { analyticRoute } from './analyticRoute'
 import { paymentRoute } from './paymentRoute'
+import { manageOrderRoute } from './manageOrderRoute'
+import { manageProductRoute } from './manageProductRoute'
 
 const Router = express.Router()
 
@@ -16,9 +17,6 @@ Router.get('/status', (req, res) => {
 
 // Auth APIs
 Router.use('/auth', authRoute)
-
-// User APIs
-Router.use('/users', userRoute)
 
 // Product APIs
 Router.use('/products', productRoute)
@@ -34,5 +32,11 @@ Router.use('/payment', paymentRoute)
 
 // Analytics APIs
 Router.use('/analytics', analyticRoute)
+
+// Admin - Manage Order APIs
+Router.use('/manage/orders', manageOrderRoute)
+
+// Admin - Manage Product APIs
+Router.use('/manage/products', manageProductRoute)
 
 export const APIs_V1 = Router

@@ -12,6 +12,12 @@ const Router = express.Router()
  * All order routes require authentication
  */
 
+// POST /api/v1/orders/checkout - Preview checkout (no DB save)
+Router.post('/checkout',
+  authMiddleware.isAuthorized,
+  orderController.checkoutPreview
+)
+
 // POST /api/v1/orders - Create new order from cart
 Router.post('/',
   authMiddleware.isAuthorized,

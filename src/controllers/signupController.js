@@ -8,11 +8,11 @@ import { userService } from '../services/userService'
 import ApiError from '../utils/ApiError'
 
 /**
- * Saves new user
+ * Register new user
  * @param {Object} req.body - { email, password, full_name, phone }
  * @returns {Object} - { success: boolean, message: string }
  */
-const storeData = async (req, res, next) => {
+const signup = async (req, res, next) => {
   try {
     const { email, password, full_name, phone } = req.body
     
@@ -41,5 +41,5 @@ const storeData = async (req, res, next) => {
 }
 
 export const signupController = {
-  storeData
+  signup
 }

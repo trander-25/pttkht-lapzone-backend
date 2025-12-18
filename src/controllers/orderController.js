@@ -6,76 +6,159 @@
 import { StatusCodes } from 'http-status-codes'
 import { orderService } from '../services/orderService'
 import { orderItemService } from '../services/orderItemService'
+import { paymentService } from '../services/paymentService'
 import { cartService } from '../services/cartService'
 import { cartItemService } from '../services/cartItemService'
+import { productService } from '../services/productService'
+import { voucherService } from '../services/voucherService'
 import ApiError from '../utils/ApiError'
-import { Order } from '../models/index.js'
+import { Order, Product, Brand, ProductDetail } from '../models/index.js'
+import { env } from '../config/environment.js'
 
 /**
- * Validates voucher code
- * @param {string} code - Voucher code
- * @returns {Promise<boolean>} - Validation result
+ * Preview checkout without saving to database
+ * POST /api/v1/orders/checkout
+ * @body {Array} items - [{ product_id, quantity }]
  */
-const processValidateVoucher = async (code) => {
-  // TODO: Implement voucher validation logic
-  void code
-  return true
+const checkoutPreview = async (req, res, next) => {
+  try {
+    const { items, voucher_code } = req.body
+    
+    if (!items || items.length === 0) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'No items provided')
+    }
+    
+    // Fetch products with details
+    const checkoutItems = []
+    
+    for (const item of items) {
+      const product = await Product.findByPk(item.product_id, {
+        include: [
+          { model: Brand, as: 'brand', attributes: ['brand_name'] },
+          { model: ProductDetail, as: 'details' }
+        ]
+      })
+      
+      if (!product) {
+        throw new ApiError(StatusCodes.NOT_FOUND, `Product ${item.product_id} not found`)
+      }
+      
+      if (product.stock < item.quantity) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock for ${product.product_name}`)
+      }
+      
+      checkoutItems.push({
+        product_id: product.product_id,
+        quantity: item.quantity,
+        product: product.toJSON()
+      })
+    }
+    
+    // Calculate totals and format response
+    let totalAmount = 0
+    const orderPreview = {
+      items: [],
+      summary: {}
+    }
+    
+    for (const item of checkoutItems) {
+      const product = item.product
+      const itemTotal = parseFloat(product.price) * item.quantity
+      totalAmount += itemTotal
+      
+      // Flatten brand data
+      const { brand, details, ...productRest } = product
+      
+      orderPreview.items.push({
+        product_id: product.product_id,
+        product_name: product.product_name,
+        brand_name: brand?.brand_name || null,
+        price: product.price,
+        quantity: item.quantity,
+        item_total: itemTotal,
+        image: product.image,
+        warranty_month: product.warranty_month,
+        details: details || null,
+        ...productRest
+      })
+    }
+    
+    // Apply voucher if provided
+    let discount = 0
+    let voucherInfo = null
+    
+    if (voucher_code) {
+      const voucher = await voucherService.getVoucherByCode(voucher_code)
+      voucherService.validateVoucher(voucher)
+      discount = voucherService.calculateDiscount(voucher, totalAmount)
+      
+      voucherInfo = {
+        code: voucher.code,
+        discount_percentage: voucher.discount_value,
+        max_discount: voucher.max_discount,
+        discount_applied: discount
+      }
+    }
+    
+    orderPreview.summary = {
+      subtotal: totalAmount,
+      discount: discount,
+      total: totalAmount - discount,
+      voucher: voucherInfo
+    }
+    
+    res.status(StatusCodes.OK).json({
+      success: true,
+      preview: orderPreview
+    })
+  } catch (error) {
+    next(error)
+  }
 }
 
 /**
- * Creates order record
- * @param {Object} data - Order data
- * @returns {Promise<boolean>} - Creation result
- */
-const processCreateOrder = async (data) => {
-  // Implementation moved from createOrder
-  return await orderService.insertOrder(data)
-}
-
-/**
- * Updates voucher usage count
- * @param {number} voucher_id - Voucher ID
- * @returns {Promise<boolean>} - Update result
- */
-const processUpdateVoucherUsage = async (voucher_id) => {
-  // TODO: Implement voucher usage update logic
-  void voucher_id
-  return true
-}
-
-/**
- * Deducts items from stock
- * @param {Array} items - Items to deduct
- * @returns {Promise<boolean>} - Update result
- */
-const processUpdateItemStock = async (items) => {
-  // TODO: Implement stock update logic
-  void items
-  return true
-}
-
-/**
- * Create new order from cart
+ * Create new order
  * POST /api/v1/orders
+ * @body {Array} items - [{ product_id, quantity }]
+ * @body {string} receiver_name - Recipient name
+ * @body {string} phone - Contact phone
+ * @body {string} shipment_address - Delivery address
+ * @body {string} payment_method - 'COD' or 'MOMO'
  */
 const createOrder = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded.user_id
+    const { items, receiver_name, phone, shipment_address, payment_method, voucher_code } = req.body
     
-    // Get user's cart
-    const cart = await cartService.getCart(userId)
-    const cartItems = await cartItemService.getCartItems(cart.cart_id)
-    
-    if (cartItems.length === 0) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, 'Cart is empty')
+    // Validate input
+    if (!items || items.length === 0) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'No items provided')
     }
     
-    // Calculate total amount
+    if (!receiver_name || !phone || !shipment_address) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Missing required shipping information')
+    }
+    
+    if (!payment_method || !['COD', 'MOMO'].includes(payment_method)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid payment method. Must be COD or MOMO')
+    }
+    
+    // Fetch products and validate stock
     let totalAmount = 0
     const orderItems = []
     
-    for (const item of cartItems) {
-      const price = item.product.price
+    for (const item of items) {
+      const product = await Product.findByPk(item.product_id)
+      
+      if (!product) {
+        throw new ApiError(StatusCodes.NOT_FOUND, `Product ${item.product_id} not found`)
+      }
+      
+      if (product.stock < item.quantity) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock for ${product.product_name}`)
+      }
+      
+      const price = parseFloat(product.price)
       totalAmount += price * item.quantity
       
       orderItems.push({
@@ -85,12 +168,29 @@ const createOrder = async (req, res, next) => {
       })
     }
     
+    // Apply voucher if provided
+    let voucherId = null
+    let discount = 0
+    
+    if (voucher_code) {
+      const voucher = await voucherService.getVoucherByCode(voucher_code)
+      voucherService.validateVoucher(voucher)
+      discount = voucherService.calculateDiscount(voucher, totalAmount)
+      voucherId = voucher.voucher_id
+    }
+    
+    const finalAmount = totalAmount - discount
+    
     // Create order
     const result = await orderService.insertOrder({
       user_id: userId,
-      total_amount: totalAmount,
+      receiver_name,
+      phone,
+      shipment_address,
+      total_amount: finalAmount,
       order_status: 'PENDING',
-      order_date: new Date()
+      order_date: new Date(),
+      voucher_id: voucherId
     })
     
     if (result) {
@@ -107,20 +207,83 @@ const createOrder = async (req, res, next) => {
       }))
       
       await orderItemService.insertOrderItems(itemsWithOrderId)
-      
-      // Clear cart after successful order
-      for (const item of cartItems) {
-        await cartItemService.deleteCartItem({
-          cart_id: cart.cart_id,
-          product_id: item.product_id
+            // Decrease product stock
+      for (const item of orderItems) {
+        const product = await Product.findByPk(item.product_id)
+        await product.update({
+          stock: product.stock - item.quantity
         })
       }
+            // Increment voucher usage count if voucher was used
+      if (voucherId) {
+        await voucherService.incrementUsageCount(voucherId)
+      }
+      
+      // Create payment record
+      await paymentService.insertPayment({
+        order_id: newOrder.order_id,
+        method: payment_method,
+        amount: finalAmount,
+        payment_status: 'PENDING'
+      })
+      
+      // If payment method is MOMO, create payment URL
+      if (payment_method === 'MOMO') {
+        try {
+          const momoResponse = await paymentService.createMoMoPayment({
+            orderId: `ORDER_${newOrder.order_id}`,
+            orderInfo: `Thanh toán đơn hàng #${newOrder.order_id}`,
+            amount: finalAmount,
+            redirectUrl: `${env.WEBSITE_DOMAIN_DEVELOPMENT}/payment/result`,
+            ipnUrl: `${env.WEBSITE_DOMAIN_DEVELOPMENT}/api/v1/payment/momo/callback`
+          })
+          
+          return res.status(StatusCodes.CREATED).json({
+            success: true,
+            message: 'Order created successfully',
+            data: {
+              order_id: newOrder.order_id,
+              subtotal: totalAmount,
+              discount: discount,
+              total_amount: finalAmount,
+              payment_method,
+              payment_url: momoResponse.payUrl,
+              qr_code_url: momoResponse.qrCodeUrl,
+              voucher_code: voucher_code || null
+            }
+          })
+        } catch (momoError) {
+          // If MoMo payment creation fails, still return success but without payment URL
+          return res.status(StatusCodes.CREATED).json({
+            success: true,
+            message: 'Order created but payment URL generation failed',
+            data: {
+              order_id: newOrder.order_id,
+              subtotal: totalAmount,
+              discount: discount,
+              total_amount: finalAmount,
+              payment_method,
+              voucher_code: voucher_code || null,
+              error: momoError.message
+            }
+          })
+        }
+      }
+      
+      // For COD payment
+      res.status(StatusCodes.CREATED).json({
+        success: true,
+        message: 'Order created successfully',
+        data: {
+          order_id: newOrder.order_id,
+          subtotal: totalAmount,
+          discount: discount,
+          total_amount: finalAmount,
+          payment_method,
+          voucher_code: voucher_code || null
+        }
+      })
     }
-    
-    res.status(StatusCodes.CREATED).json({
-      success: result,
-      message: 'Order created successfully'
-    })
   } catch (error) {
     next(error)
   }
@@ -146,7 +309,7 @@ const getUserOrders = async (req, res, next) => {
 }
 
 /**
- * Get order details with items
+ * Get order details with items and payment
  * GET /api/v1/orders/:order_id
  */
 const getOrderDetails = async (req, res, next) => {
@@ -164,11 +327,15 @@ const getOrderDetails = async (req, res, next) => {
     // Get order items
     const items = await orderItemService.getOrderItems(parseInt(order_id))
     
+    // Get payment information
+    const payment = await paymentService.getPayment(parseInt(order_id))
+    
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
         order,
-        items
+        items,
+        payment
       }
     })
   } catch (error) {
@@ -177,7 +344,7 @@ const getOrderDetails = async (req, res, next) => {
 }
 
 /**
- * Cancel order (customer can only cancel PENDING orders)
+ * Cancel order (customer can only cancel PENDING and CONFIRMED orders)
  * PUT /api/v1/orders/:order_id/cancel
  */
 const cancelOrder = async (req, res, next) => {
@@ -192,9 +359,20 @@ const cancelOrder = async (req, res, next) => {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Access denied')
     }
     
-    // Only allow canceling PENDING orders
-    if (order.order_status !== 'PENDING') {
-      throw new ApiError(StatusCodes.BAD_REQUEST, 'Can only cancel pending orders')
+    // Only allow canceling PENDING and CONFIRMED orders
+    if (order.order_status !== 'PENDING' && order.order_status !== 'CONFIRMED') {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Can only cancel pending or confirmed orders')
+    }
+    
+    // Restore product stock
+    const items = await orderItemService.getOrderItems(parseInt(order_id))
+    for (const item of items) {
+      const product = await Product.findByPk(item.product_id)
+      if (product) {
+        await product.update({
+          stock: product.stock + item.quantity
+        })
+      }
     }
     
     const result = await orderService.updateOrderStatus(parseInt(order_id), 'CANCELLED')
@@ -209,10 +387,7 @@ const cancelOrder = async (req, res, next) => {
 }
 
 export const orderController = {
-  processValidateVoucher,
-  processCreateOrder,
-  processUpdateVoucherUsage,
-  processUpdateItemStock,
+  checkoutPreview,
   createOrder,
   getUserOrders,
   getOrderDetails,
