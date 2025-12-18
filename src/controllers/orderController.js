@@ -5,10 +5,7 @@
 
 import { StatusCodes } from 'http-status-codes'
 import { orderService } from '../services/orderService'
-import { orderItemService } from '../services/orderItemService'
 import { paymentService } from '../services/paymentService'
-import { cartService } from '../services/cartService'
-import { cartItemService } from '../services/cartItemService'
 import { productService } from '../services/productService'
 import { voucherService } from '../services/voucherService'
 import ApiError from '../utils/ApiError'
@@ -31,7 +28,7 @@ const checkoutPreview = async (req, res, next) => {
     const checkoutItems = []
     
     for (const item of items) {
-      const productResult = await productService.getProduct(item.product_id, { include_brand: true })
+      const productResult = await productService.getProduct(item.product_id)
       const product = productResult.product
       
       if (product.stock < item.quantity) {
@@ -57,19 +54,22 @@ const checkoutPreview = async (req, res, next) => {
       const itemTotal = parseFloat(product.price) * item.quantity
       totalAmount += itemTotal
       
-      // Flatten brand data
-      const { brand, ...productRest } = product
-      
       orderPreview.items.push({
         product_id: product.product_id,
         product_name: product.product_name,
-        brand_name: brand?.brand_name || null,
+        brand: product.brand,
         price: product.price,
         quantity: item.quantity,
         item_total: itemTotal,
         image: product.image,
         warranty_month: product.warranty_month,
-        ...productRest
+        cpu: product.cpu,
+        ram: product.ram,
+        storage: product.storage,
+        gpu: product.gpu,
+        screen: product.screen,
+        weight: product.weight,
+        battery: product.battery
       })
     }
     
@@ -186,7 +186,7 @@ const createOrder = async (req, res, next) => {
         order_id: newOrder.order_id
       }))
       
-      await orderItemService.insertOrderItems(itemsWithOrderId)
+      await orderService.insertOrderItems(itemsWithOrderId)
       
       // Decrease product stock
       for (const item of orderItems) {
@@ -275,17 +275,22 @@ const createOrder = async (req, res, next) => {
 
 /**
  * Get user's order history
- * GET /api/v1/orders
+ * GET /api/v1/orders?page=1&limit=10
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 10, max: 50)
  */
 const getUserOrders = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded.user_id
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50)
     
-    const orders = await orderService.getOrders(userId)
+    const result = await orderService.getOrders(userId, page, limit)
     
     res.status(StatusCodes.OK).json({
       success: true,
-      data: orders
+      data: result.orders,
+      pagination: result.pagination
     })
   } catch (error) {
     next(error)
@@ -309,7 +314,7 @@ const getOrderDetails = async (req, res, next) => {
     }
     
     // Get order items
-    const items = await orderItemService.getOrderItems(parseInt(order_id))
+    const items = await orderService.getOrderItems(parseInt(order_id))
     
     // Get payment information
     const payment = await paymentService.getPayment(parseInt(order_id))
@@ -349,7 +354,7 @@ const cancelOrder = async (req, res, next) => {
     }
     
     // Restore product stock
-    const items = await orderItemService.getOrderItems(parseInt(order_id))
+    const items = await orderService.getOrderItems(parseInt(order_id))
     for (const item of items) {
       await productService.incrementStock(item.product_id, item.quantity)
     }

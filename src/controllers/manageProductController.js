@@ -9,15 +9,21 @@ import ApiError from '../utils/ApiError'
 
 /**
  * Get all products (including hidden ones)
- * GET /api/v1/manage/products
+ * GET /api/v1/manage/products?page=1&limit=12
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 12, max: 50)
  */
 const getAllProducts = async (req, res, next) => {
   try {
-    const products = await productService.getAllProductsForAdmin()
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 12, 50)
+    
+    const result = await productService.getAllProductsForAdmin(page, limit)
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: products
+      data: result.products,
+      pagination: result.pagination
     })
   } catch (error) {
     next(error)
@@ -26,7 +32,10 @@ const getAllProducts = async (req, res, next) => {
 
 /**
  * Search products by keyword
- * GET /api/v1/manage/products/search?keyword=xxx
+ * GET /api/v1/manage/products/search?keyword=xxx&page=1&limit=12
+ * @query {string} keyword - Search keyword
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 12, max: 50)
  */
 const searchProducts = async (req, res, next) => {
   try {
@@ -35,12 +44,16 @@ const searchProducts = async (req, res, next) => {
     if (!keyword) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Keyword is required')
     }
+    
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 12, 50)
 
-    const products = await productService.searchProductsForAdmin(keyword)
+    const result = await productService.searchProductsForAdmin(keyword, page, limit)
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: products
+      data: result.products,
+      pagination: result.pagination
     })
   } catch (error) {
     next(error)
@@ -69,13 +82,13 @@ const getProductDetails = async (req, res, next) => {
 /**
  * Create new product with details
  * POST /api/v1/manage/products
- * @body { product_name, brand_id, price, stock, image, description, warranty_month, cpu, ram, storage, gpu, screen, weight, battery }
+ * @body { product_name, brand, price, stock, image, description, warranty_month, cpu, ram, storage, gpu, screen, weight, battery }
  */
 const createProduct = async (req, res, next) => {
   try {
     const {
       product_name,
-      brand_id,
+      brand,
       price,
       stock,
       image,
@@ -105,7 +118,7 @@ const createProduct = async (req, res, next) => {
     // Insert product
     const productId = await productService.insertProduct({
       product_name,
-      brand_id,
+      brand,
       price,
       stock,
       image: imageUrl,
@@ -139,7 +152,7 @@ const updateProduct = async (req, res, next) => {
     const { product_id } = req.params
     const {
       product_name,
-      brand_id,
+      brand,
       price,
       stock,
       image,
@@ -183,7 +196,7 @@ const updateProduct = async (req, res, next) => {
     const productUpdated = await productService.updateProduct({
       product_id: parseInt(product_id),
       product_name,
-      brand_id,
+      brand,
       price,
       stock,
       image: imageUrl,

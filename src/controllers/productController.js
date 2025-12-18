@@ -52,8 +52,10 @@ const getProductDetails = async (req, res, next) => {
 
 /**
  * Search products by keyword
- * @param {string} req.query.keyword - Search keyword
- * @returns {Object} - List of matching products
+ * @query {string} keyword - Search keyword
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 12, max: 50)
+ * @returns {Object} - { products, pagination }
  */
 const searchProducts = async (req, res, next) => {
   try {
@@ -63,11 +65,15 @@ const searchProducts = async (req, res, next) => {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Keyword is required')
     }
     
-    const products = await productService.searchProducts(keyword)
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 12, 50)
+    
+    const result = await productService.searchProducts(keyword, page, limit)
     
     res.status(StatusCodes.OK).json({
       success: true,
-      data: products
+      data: result.products,
+      pagination: result.pagination
     })
   } catch (error) {
     next(error)

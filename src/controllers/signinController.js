@@ -79,24 +79,6 @@ const signin = async (req, res, next) => {
   }
 }
 
-/**
- * User logout - clear authentication cookies
- */
-const signout = async (req, res, next) => {
-  try {
-    res.clearCookie('accessToken')
-    res.clearCookie('refreshToken')
-    
-    res.status(StatusCodes.OK).json({
-      success: true,
-      message: 'Signed out successfully'
-    })
-  } catch (error) {
-    next(error)
-  }
-}
-
 export const signinController = {
-  signin,
-  signout
+  signin
 }

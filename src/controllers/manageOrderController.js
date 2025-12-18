@@ -4,22 +4,27 @@
 
 import { StatusCodes } from 'http-status-codes'
 import { orderService } from '../services/orderService'
-import { orderItemService } from '../services/orderItemService'
 import { paymentService } from '../services/paymentService'
 import { productService } from '../services/productService'
 import ApiError from '../utils/ApiError'
 
 /**
  * Get all orders (Admin)
- * GET /api/v1/manage/orders
+ * GET /api/v1/manage/orders?page=1&limit=10
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 10, max: 50)
  */
 const getAllOrders = async (req, res, next) => {
   try {
-    const orders = await orderService.getAllOrders()
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50)
+    
+    const result = await orderService.getAllOrders(page, limit)
     
     res.status(StatusCodes.OK).json({
       success: true,
-      data: orders
+      data: result.orders,
+      pagination: result.pagination
     })
   } catch (error) {
     next(error)
@@ -62,7 +67,7 @@ const getOrderDetails = async (req, res, next) => {
     const { order_id } = req.params
     
     const order = await orderService.getOrder(parseInt(order_id))
-    const items = await orderItemService.getOrderItems(parseInt(order_id))
+    const items = await orderService.getOrderItems(parseInt(order_id))
     const payment = await paymentService.getPayment(parseInt(order_id))
     
     res.status(StatusCodes.OK).json({
@@ -107,7 +112,7 @@ const updateOrder = async (req, res, next) => {
       }
       
       // Restore product stock
-      const items = await orderItemService.getOrderItems(parseInt(order_id))
+      const items = await orderService.getOrderItems(parseInt(order_id))
       for (const item of items) {
         await productService.incrementStock(item.product_id, item.quantity)
       }

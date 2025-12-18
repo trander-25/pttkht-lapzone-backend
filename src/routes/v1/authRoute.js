@@ -5,6 +5,7 @@
 import express from 'express'
 import { signupController } from '../../controllers/signupController'
 import { signinController } from '../../controllers/signinController'
+import { authController } from '../../controllers/authController'
 
 const Router = express.Router()
 
@@ -22,7 +23,10 @@ Router.post('/signup', signupController.signup)
 // POST /api/v1/auth/signin - Login
 Router.post('/signin', signinController.signin)
 
+// POST /api/v1/auth/refresh-token - Refresh access token
+Router.post('/refresh-token', authController.refreshToken)
+
 // POST /api/v1/auth/signout - Logout
-Router.post('/signout', signinController.signout)
+Router.post('/signout', authController.signout)
 
 export const authRoute = Router

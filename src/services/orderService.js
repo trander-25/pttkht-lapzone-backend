@@ -3,7 +3,7 @@
  * Implements exact functions from Order entity specification
  */
 
-import { Order } from '../models/index'
+import { Order, OrderItem, Product } from '../models/index'
 import ApiError from '../utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 
@@ -34,16 +34,33 @@ const insertOrder = async (order) => {
 /**
  * Gets history of orders for a user
  * @param {number} user_id - User ID
- * @returns {Promise<Array>} - List of orders
+ * @param {number} page - Page number
+ * @param {number} limit - Items per page
+ * @returns {Promise<Object>} - { orders, pagination }
  */
-const getOrders = async (user_id) => {
+const getOrders = async (user_id, page = 1, limit = 10) => {
   try {
-    const orders = await Order.findAll({
+    const offset = (page - 1) * limit
+    
+    const { count, rows } = await Order.findAndCountAll({
       where: { user_id },
-      order: [['order_date', 'DESC']]
+      order: [['order_date', 'DESC']],
+      limit: limit,
+      offset: offset
     })
     
-    return orders
+    const totalPages = Math.ceil(count / limit)
+    
+    return {
+      orders: rows,
+      pagination: {
+        total: count,
+        totalPages: totalPages,
+        currentPage: page,
+        limit: limit,
+        hasMore: page < totalPages
+      }
+    }
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting user orders')
   }
@@ -108,17 +125,78 @@ const updateOrder = async (order_id, updates) => {
 
 /**
  * Gets all orders for Admin
- * @returns {Promise<Array>} - List of all orders
+ * @param {number} page - Page number
+ * @param {number} limit - Items per page
+ * @returns {Promise<Object>} - { orders, pagination }
  */
-const getAllOrders = async () => {
+const getAllOrders = async (page = 1, limit = 10) => {
   try {
-    const orders = await Order.findAll({
-      order: [['order_date', 'DESC']]
+    const offset = (page - 1) * limit
+    
+    const { count, rows } = await Order.findAndCountAll({
+      order: [['order_date', 'DESC']],
+      limit: limit,
+      offset: offset
     })
     
-    return orders
+    const totalPages = Math.ceil(count / limit)
+    
+    return {
+      orders: rows,
+      pagination: {
+        total: count,
+        totalPages: totalPages,
+        currentPage: page,
+        limit: limit,
+        hasMore: page < totalPages
+      }
+    }
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting all orders')
+  }
+}
+
+/**
+ * Saves the products for an order
+ * @param {Array} items - Array of order items { order_id, product_id, quantity, unit_price }
+ * @returns {Promise<Boolean>} - True if successful
+ */
+const insertOrderItems = async (items) => {
+  try {
+    // Bulk insert all items
+    await OrderItem.bulkCreate(items.map(item => ({
+      order_id: item.order_id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price
+    })))
+    
+    return true
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error inserting order items')
+  }
+}
+
+/**
+ * Gets products in a specific order
+ * @param {number} order_id - Order ID
+ * @returns {Promise<Array>} - List of order items with product details
+ */
+const getOrderItems = async (order_id) => {
+  try {
+    const items = await OrderItem.findAll({
+      where: { order_id },
+      include: [
+        {
+          model: Product,
+          as: 'product'
+        }
+      ]
+    })
+    
+    return items
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting order items')
   }
 }
 
@@ -128,5 +206,7 @@ export const orderService = {
   getOrder,
   updateOrderStatus,
   updateOrder,
-  getAllOrders
+  getAllOrders,
+  insertOrderItems,
+  getOrderItems
 }
