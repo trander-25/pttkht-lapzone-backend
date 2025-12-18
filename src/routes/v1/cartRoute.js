@@ -15,25 +15,25 @@ const Router = express.Router()
 // GET /api/v1/cart - Get user's cart with all items
 Router.get('/',
   authMiddleware.isAuthorized,
-  cartController.getUserCart
+  cartController.getCart
 )
 
 // POST /api/v1/cart/items - Add product to cart
 Router.post('/items',
   authMiddleware.isAuthorized,
-  cartController.addItemToCart
+  cartController.addItem
 )
 
 // PUT /api/v1/cart/items/:product_id - Update item quantity
 Router.put('/items/:product_id',
   authMiddleware.isAuthorized,
-  cartController.updateCartItemQuantity
+  cartController.updateItemQuantity
 )
 
 // DELETE /api/v1/cart/items/:product_id - Remove item from cart
 Router.delete('/items/:product_id',
   authMiddleware.isAuthorized,
-  cartController.removeItemFromCart
+  cartController.removeItem
 )
 
 // DELETE /api/v1/cart - Clear all items from cart

@@ -13,16 +13,16 @@ const Router = express.Router()
  */
 
 // POST /api/v1/auth/signup - Register new user
-Router.post('/signup', signupController.storeData)
+Router.post('/signup', signupController.signup)
 
 /**
  * SIGN IN ROUTES
  */
 
 // POST /api/v1/auth/signin - Login
-Router.post('/signin', signinController.validateCredentials)
+Router.post('/signin', signinController.signin)
 
 // POST /api/v1/auth/signout - Logout
-Router.post('/signout', signinController.signOut)
+Router.post('/signout', signinController.signout)
 
 export const authRoute = Router

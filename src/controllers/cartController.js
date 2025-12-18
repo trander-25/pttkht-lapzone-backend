@@ -6,13 +6,14 @@
 import { StatusCodes } from 'http-status-codes'
 import { cartService } from '../services/cartService'
 import { cartItemService } from '../services/cartItemService'
+import { CartItem, Product } from '../models/index'
 import ApiError from '../utils/ApiError'
 
 /**
  * Get user's cart with all items
  * GET /api/v1/cart
  */
-const getUserCart = async (req, res, next) => {
+const getCart = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded.user_id
     
@@ -38,7 +39,7 @@ const getUserCart = async (req, res, next) => {
  * Add product to cart
  * POST /api/v1/cart/items
  */
-const addItemToCart = async (req, res, next) => {
+const addItem = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded.user_id
     const { product_id, quantity } = req.body
@@ -54,30 +55,20 @@ const addItemToCart = async (req, res, next) => {
     const exists = await cartItemService.checkItemExists(cart.cart_id, product_id)
     
     if (exists) {
-      // Update quantity
-      const result = await cartItemService.updateItemQuantity({
-        cart_id: cart.cart_id,
-        product_id,
-        quantity: quantity || 1
-      })
-      
-      res.status(StatusCodes.OK).json({
-        success: result,
-        message: 'Cart item quantity updated'
-      })
-    } else {
-      // Insert new item
-      const result = await cartItemService.insertCartItem({
-        cart_id: cart.cart_id,
-        product_id,
-        quantity: quantity || 1
-      })
-      
-      res.status(StatusCodes.CREATED).json({
-        success: result,
-        message: 'Product added to cart'
-      })
+      throw new ApiError(StatusCodes.CONFLICT, 'Product already exists in cart. Please update quantity instead.')
     }
+    
+    // Insert new item
+    const result = await cartItemService.insertCartItem({
+      cart_id: cart.cart_id,
+      product_id,
+      quantity: quantity || 1
+    })
+    
+    res.status(StatusCodes.CREATED).json({
+      success: result,
+      message: 'Product added to cart'
+    })
   } catch (error) {
     next(error)
   }
@@ -87,7 +78,7 @@ const addItemToCart = async (req, res, next) => {
  * Update item quantity in cart
  * PUT /api/v1/cart/items/:product_id
  */
-const updateCartItemQuantity = async (req, res, next) => {
+const updateItemQuantity = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded.user_id
     const { product_id } = req.params
@@ -99,6 +90,17 @@ const updateCartItemQuantity = async (req, res, next) => {
     
     // Get cart
     const cart = await cartService.getCart(userId)
+    
+    // Check stock availability
+    const product = await Product.findByPk(parseInt(product_id))
+    
+    if (!product) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
+    }
+    
+    if (product.stock < quantity) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, `Insufficient stock. Only ${product.stock} items available`)
+    }
     
     // Update quantity
     const result = await cartItemService.updateItemQuantity({
@@ -120,7 +122,7 @@ const updateCartItemQuantity = async (req, res, next) => {
  * Remove item from cart
  * DELETE /api/v1/cart/items/:product_id
  */
-const removeItemFromCart = async (req, res, next) => {
+const removeItem = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded.user_id
     const { product_id } = req.params
@@ -175,9 +177,9 @@ const clearCart = async (req, res, next) => {
 }
 
 export const cartController = {
-  getUserCart,
-  addItemToCart,
-  updateCartItemQuantity,
-  removeItemFromCart,
+  getCart,
+  addItem,
+  updateItemQuantity,
+  removeItem,
   clearCart
 }

@@ -11,11 +11,11 @@ import { User } from '../models/index.js'
 import { env } from '../config/environment.js'
 
 /**
- * Validates login credentials and returns JWT token
+ * User login - validates credentials and returns JWT tokens
  * @param {Object} req.body - { email, password }
  * @returns {Object} - { success: boolean, accessToken: string, user: Object }
  */
-const validateCredentials = async (req, res, next) => {
+const signin = async (req, res, next) => {
   try {
     const { email, password } = req.body
     
@@ -84,9 +84,9 @@ const validateCredentials = async (req, res, next) => {
 }
 
 /**
- * Sign out - Clear cookies
+ * User logout - clear authentication cookies
  */
-const signOut = async (req, res, next) => {
+const signout = async (req, res, next) => {
   try {
     res.clearCookie('accessToken')
     res.clearCookie('refreshToken')
@@ -101,6 +101,6 @@ const signOut = async (req, res, next) => {
 }
 
 export const signinController = {
-  validateCredentials,
-  signOut
+  signin,
+  signout
 }

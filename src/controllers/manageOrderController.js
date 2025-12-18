@@ -1,105 +1,22 @@
 /**
- * MANAGE ORDER CONTROLLER
- * Admin order management
+ * MANAGE ORDER CONTROLLER - Admin order management
  */
 
 import { StatusCodes } from 'http-status-codes'
 import { orderService } from '../services/orderService'
 import { orderItemService } from '../services/orderItemService'
 import { paymentService } from '../services/paymentService'
+import { Order, Product } from '../models/index'
+import { Op } from 'sequelize'
 import ApiError from '../utils/ApiError'
 
 /**
- * Gets orders for a user
- * @param {number} user_id - User ID (optional for all orders)
- * @returns {Promise<Array>} - List of orders
- */
-const getOrderList = async (user_id = null) => {
-  if (user_id) {
-    return await orderService.getOrders(user_id)
-  }
-  return await orderService.getAllOrders()
-}
-
-/**
- * Gets order details
- * @param {number} order_id - Order ID
- * @returns {Promise<Object>} - Order details with items
- */
-const getOrderDetailInformation = async (order_id) => {
-  const order = await orderService.getOrder(order_id)
-  const items = await orderItemService.getOrderItems(order_id)
-  return { order, items }
-}
-
-/**
- * Gets payment info for order
- * @param {number} order_id - Order ID
- * @returns {Promise<Object>} - Payment information
- */
-const getPaymentInformation = async (order_id) => {
-  return await paymentService.getPayment(order_id)
-}
-
-/**
- * Checks if order is eligible for cancellation
- * @param {number} order_id - Order ID
- * @returns {Promise<boolean>} - True if cancellable
- */
-const validateEligibleStatus = async (order_id) => {
-  const order = await orderService.getOrder(order_id)
-  return order.order_status === 'PENDING' || order.order_status === 'CONFIRMED'
-}
-
-/**
- * Cancels order
- * @param {number} order_id - Order ID
- * @returns {Promise<boolean>} - Cancellation result
- */
-const sendCancelRequest = async (order_id) => {
-  return await orderService.updateOrderStatus(order_id, 'CANCELLED')
-}
-
-/**
- * Restocks items after cancellation
- * @param {Array} items - Items to restock
- * @returns {Promise<boolean>} - Restock result
- */
-const sendUpdateStockRequest = async (items) => {
-  // TODO: Implement stock update logic
-  void items
-  return true
-}
-
-/**
- * Admin updates order status
- * @param {number} order_id - Order ID
- * @param {string} status - New status
- * @returns {Promise<boolean>} - Update result
- */
-const sendUpdateRequest = async (order_id, status) => {
-  return await orderService.updateOrderStatus(order_id, status)
-}
-
-/**
- * Searches orders by keyword
- * @param {string} keyword - Search keyword
- * @returns {Promise<Array>} - List of matching orders
- */
-const processSearchRequest = async (keyword) => {
-  // TODO: Implement order search logic
-  void keyword
-  const orders = await orderService.getAllOrders()
-  return orders
-}
-
-/**
  * Get all orders (Admin)
- * GET /api/v1/manage-orders
+ * GET /api/v1/manage/orders
  */
 const getAllOrders = async (req, res, next) => {
   try {
-    const orders = await getOrderList()
+    const orders = await orderService.getAllOrders()
     
     res.status(StatusCodes.OK).json({
       success: true,
@@ -111,18 +28,31 @@ const getAllOrders = async (req, res, next) => {
 }
 
 /**
- * Get order details (Admin)
- * GET /api/v1/manage-orders/:order_id
+ * Search orders by keyword
+ * GET /api/v1/manage/orders/search?keyword=xxx
  */
-const getOrderDetails = async (req, res, next) => {
+const searchOrders = async (req, res, next) => {
   try {
-    const { order_id } = req.params
+    const { keyword } = req.query
     
-    const data = await getOrderDetailInformation(parseInt(order_id))
+    if (!keyword) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Keyword is required')
+    }
+
+    const orders = await Order.findAll({
+      where: {
+        [Op.or]: [
+          { order_id: isNaN(keyword) ? null : parseInt(keyword) },
+          { receiver_name: { [Op.like]: `%${keyword}%` } },
+          { phone: { [Op.like]: `%${keyword}%` } }
+        ]
+      },
+      order: [['order_date', 'DESC']]
+    })
     
     res.status(StatusCodes.OK).json({
       success: true,
-      data
+      data: orders
     })
   } catch (error) {
     next(error)
@@ -130,23 +60,85 @@ const getOrderDetails = async (req, res, next) => {
 }
 
 /**
- * Update order status (Admin)
- * PUT /api/v1/manage-orders/:order_id/status
+ * Get order details with items and payment
+ * GET /api/v1/manage/orders/:order_id
  */
-const updateOrderStatus = async (req, res, next) => {
+const getOrderDetails = async (req, res, next) => {
   try {
     const { order_id } = req.params
-    const { status } = req.body
     
-    if (!status) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, 'Status is required')
-    }
-    
-    const result = await sendUpdateRequest(parseInt(order_id), status)
+    const order = await orderService.getOrder(parseInt(order_id))
+    const items = await orderItemService.getOrderItems(parseInt(order_id))
+    const payment = await paymentService.getPayment(parseInt(order_id))
     
     res.status(StatusCodes.OK).json({
-      success: result,
-      message: 'Order status updated successfully'
+      success: true,
+      data: {
+        order,
+        items,
+        payment
+      }
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * Update order information (Admin)
+ * PUT /api/v1/manage/orders/:order_id
+ * Can update: order_status, receiver_name, phone, shipment_address, payment_status
+ */
+const updateOrder = async (req, res, next) => {
+  try {
+    const { order_id } = req.params
+    const { order_status, receiver_name, phone, shipment_address, payment_status } = req.body
+    
+    // Build update data object with only provided fields
+    const updateData = {}
+    if (order_status) updateData.order_status = order_status
+    if (receiver_name) updateData.receiver_name = receiver_name
+    if (phone) updateData.phone = phone
+    if (shipment_address) updateData.shipment_address = shipment_address
+    
+    if (Object.keys(updateData).length === 0 && !payment_status) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'No data to update')
+    }
+    
+    // If cancelling order, validate eligibility
+    if (order_status === 'CANCELLED') {
+      const order = await orderService.getOrder(parseInt(order_id))
+      if (order.order_status !== 'PENDING' && order.order_status !== 'CONFIRMED') {
+        throw new ApiError(StatusCodes.BAD_REQUEST, 'Order cannot be cancelled')
+      }
+      
+      // Restore product stock
+      const items = await orderItemService.getOrderItems(parseInt(order_id))
+      for (const item of items) {
+        const product = await Product.findByPk(item.product_id)
+        if (product) {
+          await product.update({
+            stock: product.stock + item.quantity
+          })
+        }
+      }
+    }
+    
+    // Update order
+    let result = null
+    if (Object.keys(updateData).length > 0) {
+      result = await orderService.updateOrder(parseInt(order_id), updateData)
+    }
+    
+    // Update payment status if provided
+    if (payment_status) {
+      await paymentService.updatePayment(parseInt(order_id), { payment_status })
+    }
+    
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Order updated successfully',
+      data: result
     })
   } catch (error) {
     next(error)
@@ -154,15 +146,8 @@ const updateOrderStatus = async (req, res, next) => {
 }
 
 export const manageOrderController = {
-  getOrderList,
-  getOrderDetailInformation,
-  getPaymentInformation,
-  validateEligibleStatus,
-  sendCancelRequest,
-  sendUpdateStockRequest,
-  sendUpdateRequest,
-  processSearchRequest,
   getAllOrders,
+  searchOrders,
   getOrderDetails,
-  updateOrderStatus
+  updateOrder
 }

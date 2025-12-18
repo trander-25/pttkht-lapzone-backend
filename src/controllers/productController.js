@@ -8,16 +8,22 @@ import { productService } from '../services/productService'
 import ApiError from '../utils/ApiError'
 
 /**
- * Gets all products
- * @returns {Object} - List of all products
+ * Gets all products with pagination
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 12, max: 50)
+ * @returns {Object} - { products, pagination }
  */
 const getAllProducts = async (req, res, next) => {
   try {
-    const products = await productService.getAllProducts()
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 12, 50) // Max 50 items per page
+    
+    const result = await productService.getAllProducts(page, limit)
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: products
+      data: result.products,
+      pagination: result.pagination
     })
   } catch (error) {
     next(error)
@@ -25,11 +31,11 @@ const getAllProducts = async (req, res, next) => {
 }
 
 /**
- * Gets product details
+ * Get product details by ID
  * @param {number} req.params.id - Product ID
  * @returns {Object} - Product with full details
  */
-const processProductDetailsRequest = async (req, res, next) => {
+const getProductDetails = async (req, res, next) => {
   try {
     const { id } = req.params
 
@@ -45,11 +51,11 @@ const processProductDetailsRequest = async (req, res, next) => {
 }
 
 /**
- * Searches products
+ * Search products by keyword
  * @param {string} req.query.keyword - Search keyword
  * @returns {Object} - List of matching products
  */
-const processSearchRequest = async (req, res, next) => {
+const searchProducts = async (req, res, next) => {
   try {
     const { keyword } = req.query
     
@@ -70,6 +76,6 @@ const processSearchRequest = async (req, res, next) => {
 
 export const productController = {
   getAllProducts,
-  processProductDetailsRequest,
-  processSearchRequest
+  getProductDetails,
+  searchProducts
 }

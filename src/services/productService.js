@@ -9,12 +9,16 @@ import { StatusCodes } from 'http-status-codes'
 import { Op } from 'sequelize'
 
 /**
- * Gets a list of all available products
- * @returns {Promise<Array>} - List of products with flattened brand data
+ * Gets a list of all available products with pagination
+ * @param {number} page - Page number (default: 1)
+ * @param {number} limit - Items per page (default: 12)
+ * @returns {Promise<Object>} - { products, pagination: { total, totalPages, currentPage, hasMore } }
  */
-const getAllProducts = async () => {
+const getAllProducts = async (page = 1, limit = 12) => {
   try {
-    const products = await Product.findAll({
+    const offset = (page - 1) * limit
+    
+    const { count, rows } = await Product.findAndCountAll({
       where: { is_show: true },
       include: [
         { 
@@ -23,11 +27,13 @@ const getAllProducts = async () => {
           attributes: ['brand_name']
         }
       ],
-      order: [['product_id', 'DESC']]
+      order: [['product_id', 'DESC']],
+      limit: limit,
+      offset: offset
     })
     
     // Flatten brand data to same level as product data
-    const formattedProducts = products.map(product => {
+    const formattedProducts = rows.map(product => {
       const productData = product.toJSON()
       const { brand, ...rest } = productData
       return {
@@ -36,7 +42,18 @@ const getAllProducts = async () => {
       }
     })
     
-    return formattedProducts
+    const totalPages = Math.ceil(count / limit)
+    
+    return {
+      products: formattedProducts,
+      pagination: {
+        total: count,
+        totalPages: totalPages,
+        currentPage: page,
+        limit: limit,
+        hasMore: page < totalPages
+      }
+    }
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error getting all products')
   }
@@ -99,13 +116,13 @@ const searchProducts = async (keyword) => {
 }
 
 /**
- * Adds a new product
+ * Adds a new product (Admin)
  * @param {Object} product - Product data { product_name, brand_id, price, stock, image, description, warranty_month }
- * @returns {Promise<Boolean>} - True if successful
+ * @returns {Promise<number>} - Created product ID
  */
 const insertProduct = async (product) => {
   try {
-    await Product.create({
+    const newProduct = await Product.create({
       product_name: product.product_name,
       brand_id: product.brand_id,
       price: product.price,
@@ -116,15 +133,15 @@ const insertProduct = async (product) => {
       is_show: true
     })
     
-    return true
+    return newProduct.product_id
   } catch (error) {
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error inserting product')
   }
 }
 
 /**
- * Updates product information
- * @param {Object} product - Product data { product_id, product_name, brand_id, price, stock, image, description, warranty_month }
+ * Updates product information (Admin)
+ * @param {Object} product - Product data { product_id, product_name, brand_id, price, stock, image, description, warranty_month, is_show }
  * @returns {Promise<Boolean>} - True if successful
  */
 const updateProduct = async (product) => {
@@ -138,6 +155,7 @@ const updateProduct = async (product) => {
     if (product.image) updateData.image = product.image
     if (product.description) updateData.description = product.description
     if (product.warranty_month) updateData.warranty_month = product.warranty_month
+    if (product.is_show !== undefined) updateData.is_show = product.is_show
     
     const [updated] = await Product.update(updateData, {
       where: { product_id: product.product_id }
@@ -150,7 +168,7 @@ const updateProduct = async (product) => {
 }
 
 /**
- * Removes a product (soft delete by setting is_show = false)
+ * Removes a product - soft delete (Admin)
  * @param {number} product_id - Product ID
  * @returns {Promise<Boolean>} - True if successful
  */
@@ -167,35 +185,11 @@ const deleteProduct = async (product_id) => {
   }
 }
 
-/**
- * Checks if enough items are available
- * @param {number} product_id - Product ID
- * @param {number} quantity - Required quantity
- * @returns {Promise<Boolean>} - True if available, false otherwise
- */
-const checkStock = async (product_id, quantity) => {
-  try {
-    const product = await Product.findByPk(product_id, {
-      attributes: ['stock']
-    })
-    
-    if (!product) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
-    }
-    
-    return product.stock >= quantity
-  } catch (error) {
-    if (error instanceof ApiError) throw error
-    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error checking stock')
-  }
-}
-
 export const productService = {
   getAllProducts,
   getProduct,
   searchProducts,
   insertProduct,
   updateProduct,
-  deleteProduct,
-  checkStock
+  deleteProduct
 }

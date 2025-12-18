@@ -9,16 +9,20 @@ import { StatusCodes } from 'http-status-codes'
 
 /**
  * Creates a new order record
- * @param {Object} order - Order data { user_id, total_amount, order_status, order_date }
+ * @param {Object} order - Order data { user_id, receiver_name, phone, shipment_address, total_amount, order_status, order_date, voucher_id }
  * @returns {Promise<Boolean>} - True if successful
  */
 const insertOrder = async (order) => {
   try {
     await Order.create({
       user_id: order.user_id,
+      receiver_name: order.receiver_name,
+      phone: order.phone,
+      shipment_address: order.shipment_address,
       total_amount: order.total_amount,
       order_status: order.order_status || 'PENDING',
-      order_date: order.order_date || new Date()
+      order_date: order.order_date || new Date(),
+      voucher_id: order.voucher_id || null
     })
     
     return true
@@ -85,6 +89,24 @@ const updateOrderStatus = async (order_id, status) => {
 }
 
 /**
+ * Updates order information (Admin)
+ * @param {number} order_id - Order ID
+ * @param {Object} updates - Order updates { receiver_name, phone, shipment_address, order_status }
+ * @returns {Promise<Boolean>} - True if successful
+ */
+const updateOrder = async (order_id, updates) => {
+  try {
+    const [updated] = await Order.update(updates, {
+      where: { order_id }
+    })
+    
+    return updated > 0
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error updating order')
+  }
+}
+
+/**
  * Gets all orders for Admin
  * @returns {Promise<Array>} - List of all orders
  */
@@ -105,5 +127,6 @@ export const orderService = {
   getOrders,
   getOrder,
   updateOrderStatus,
+  updateOrder,
   getAllOrders
 }
