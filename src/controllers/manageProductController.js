@@ -146,6 +146,7 @@ const createProduct = async (req, res, next) => {
 /**
  * Update product and details
  * PUT /api/v1/manage/products/:product_id
+ * Use is_show field to hide/show product (soft delete): is_show: false to hide, is_show: true to show
  */
 const updateProduct = async (req, res, next) => {
   try {
@@ -222,8 +223,10 @@ const updateProduct = async (req, res, next) => {
 }
 
 /**
- * Delete product (soft delete)
+ * Delete product permanently from database (hard delete)
  * DELETE /api/v1/manage/products/:product_id
+ * Only works if product is not in any cart or order
+ * To hide product from customers, use PUT endpoint with is_show: false instead
  */
 const deleteProduct = async (req, res, next) => {
   try {
@@ -233,7 +236,7 @@ const deleteProduct = async (req, res, next) => {
 
     res.status(StatusCodes.OK).json({
       success: result,
-      message: 'Product deleted successfully'
+      message: 'Product permanently deleted from database'
     })
   } catch (error) {
     next(error)

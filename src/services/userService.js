@@ -60,6 +60,11 @@ const validateSignIn = async (email, password) => {
       return false
     }
     
+    // Check if user account is active
+    if (!user.is_active) {
+      return false
+    }
+    
     // Validate password
     const isPasswordValid = await bcrypt.compare(password, user.password)
     return isPasswordValid
