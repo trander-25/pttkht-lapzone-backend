@@ -33,25 +33,27 @@ const getAllOrders = async (req, res, next) => {
 
 /**
  * Search orders by keyword
- * GET /api/v1/manage/orders/search?keyword=xxx
- * TODO: Move search logic to orderService
+ * GET /api/v1/manage/orders/search?keyword=xxx&page=1&limit=10
+ * @query {string} keyword - Search keyword (required)
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 10, max: 50)
  */
 const searchOrders = async (req, res, next) => {
   try {
     const { keyword } = req.query
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50)
     
     if (!keyword) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Keyword is required')
     }
 
-    // TODO: Implement orderService.searchOrders(keyword)
-    // For now, return all orders and let client filter
-    const orders = await orderService.getAllOrders()
+    const result = await orderService.searchOrders(keyword, page, limit)
     
     res.status(StatusCodes.OK).json({
       success: true,
-      data: orders,
-      message: 'Search functionality temporarily returns all orders'
+      data: result.orders,
+      pagination: result.pagination
     })
   } catch (error) {
     next(error)
@@ -110,12 +112,6 @@ const updateOrder = async (req, res, next) => {
       if (order.order_status !== 'PENDING' && order.order_status !== 'CONFIRMED') {
         throw new ApiError(StatusCodes.BAD_REQUEST, 'Order cannot be cancelled')
       }
-      
-      // Restore product stock
-      const items = await orderService.getOrderItems(parseInt(order_id))
-      for (const item of items) {
-        await productService.incrementStock(item.product_id, item.quantity)
-      }
     }
     
     // Update order
@@ -127,6 +123,14 @@ const updateOrder = async (req, res, next) => {
     // Update payment status if provided
     if (payment_status) {
       await paymentService.updatePayment(parseInt(order_id), { payment_status })
+    }
+    
+    // Restore product stock AFTER updating order and payment
+    if (order_status === 'CANCELLED') {
+      const items = await orderService.getOrderItems(parseInt(order_id))
+      for (const item of items) {
+        await productService.incrementStock(item.product_id, item.quantity)
+      }
     }
     
     res.status(StatusCodes.OK).json({
