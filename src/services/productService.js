@@ -176,19 +176,27 @@ const updateProduct = async (product) => {
 }
 
 /**
- * Removes a product - soft delete (Admin)
+ * Removes a product permanently from database (Admin)
+ * Only allowed if product is not referenced in any cart_items or order_items
+ * For hiding products from customers, use updateProduct with is_show: false instead
  * @param {number} product_id - Product ID
  * @returns {Promise<Boolean>} - True if successful
  */
 const deleteProduct = async (product_id) => {
   try {
-    const [updated] = await Product.update(
-      { is_show: false },
-      { where: { product_id } }
-    )
+    const product = await Product.findByPk(product_id)
+    if (!product) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Product not found')
+    }
     
-    return updated > 0
+    // Hard delete - database will throw constraint error if referenced
+    await Product.destroy({ where: { product_id } })
+    return true
   } catch (error) {
+    if (error instanceof ApiError) throw error
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Cannot delete product. It is referenced in existing carts or orders. Use is_show field to hide it instead.')
+    }
     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error deleting product')
   }
 }

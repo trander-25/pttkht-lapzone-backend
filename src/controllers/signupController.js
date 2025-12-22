@@ -16,6 +16,11 @@ const signup = async (req, res, next) => {
   try {
     const { email, password, full_name, phone } = req.body
     
+    // Validate required fields
+    if (!email || !password || !full_name) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Missing required fields: email, password, full_name')
+    }
+    
     // Check if email already exists
     const emailExists = await userService.checkEmailExistence(email)
     if (emailExists) {
@@ -27,7 +32,7 @@ const signup = async (req, res, next) => {
       email,
       password,
       full_name,
-      phone,
+      phone: phone || null,
       role: 'CUSTOMER'
     })
     

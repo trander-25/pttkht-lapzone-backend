@@ -18,6 +18,7 @@ export const env = {
 
   // Domain
   WEBSITE_DOMAIN_DEVELOPMENT: process.env.WEBSITE_DOMAIN_DEVELOPMENT || 'http://localhost:8020',
+  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
 
   // JWT
   ACCESS_TOKEN_SECRET_SIGNATURE: process.env.ACCESS_TOKEN_SECRET_SIGNATURE,

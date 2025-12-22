@@ -140,9 +140,33 @@ const removeItem = async (req, res, next) => {
   }
 }
 
+/**
+ * Clear all items from cart
+ * DELETE /api/v1/cart
+ */
+const clearCart = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded.user_id
+    
+    // Get cart
+    const cart = await cartService.getCart(userId)
+    
+    // Clear all items from cart
+    const result = await cartService.clearCartItems(cart.cart_id)
+    
+    res.status(StatusCodes.OK).json({
+      success: result,
+      message: 'Cart cleared successfully'
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const cartController = {
   getCart,
   addItem,
   updateItemQuantity,
-  removeItem
+  removeItem,
+  clearCart
 }

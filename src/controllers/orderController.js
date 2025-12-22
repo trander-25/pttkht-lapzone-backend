@@ -8,6 +8,7 @@ import { orderService } from '../services/orderService'
 import { paymentService } from '../services/paymentService'
 import { productService } from '../services/productService'
 import { voucherService } from '../services/voucherService'
+import { userService } from '../services/userService'
 import ApiError from '../utils/ApiError'
 import { env } from '../config/environment.js'
 
@@ -166,7 +167,7 @@ const createOrder = async (req, res, next) => {
     }
     
     const finalAmount = totalAmount - discount
-    
+
     // Create order
     const newOrder = await orderService.insertOrder({
       user_id: userId,
@@ -213,7 +214,7 @@ const createOrder = async (req, res, next) => {
             orderId: `ORDER_${newOrder.order_id}`,
             orderInfo: `Thanh toán đơn hàng #${newOrder.order_id}`,
             amount: finalAmount,
-            redirectUrl: `${env.WEBSITE_DOMAIN_DEVELOPMENT}/payment/result`,
+            redirectUrl: `${env.FRONTEND_URL || 'http://localhost:5173'}/payment/result`,
             ipnUrl: `${env.WEBSITE_DOMAIN_DEVELOPMENT}/api/v1/payment/momo/callback`
           })
           
@@ -275,17 +276,25 @@ const createOrder = async (req, res, next) => {
 
 /**
  * Get user's order history
- * GET /api/v1/orders?page=1&limit=10
+ * GET /api/v1/orders?page=1&limit=10&status=PENDING
  * @query {number} page - Page number (default: 1)
  * @query {number} limit - Items per page (default: 10, max: 50)
+ * @query {string} status - Order status filter (PENDING, CONFIRMED, SHIPPING, COMPLETED, CANCELLED)
  */
 const getUserOrders = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded.user_id
     const page = parseInt(req.query.page) || 1
     const limit = Math.min(parseInt(req.query.limit) || 10, 50)
+    const status = req.query.status || null
     
-    const result = await orderService.getOrders(userId, page, limit)
+    // Validate status if provided
+    const validStatuses = ['PENDING', 'CONFIRMED', 'SHIPPING', 'COMPLETED', 'CANCELLED']
+    if (status && !validStatuses.includes(status)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid order status')
+    }
+    
+    const result = await orderService.getOrders(userId, page, limit, status)
     
     res.status(StatusCodes.OK).json({
       success: true,

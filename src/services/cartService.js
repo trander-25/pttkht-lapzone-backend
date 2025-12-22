@@ -124,11 +124,29 @@ const deleteCartItem = async (item) => {
   }
 }
 
+/**
+ * Clears all items from the cart
+ * @param {number} cart_id - Cart ID
+ * @returns {Promise<Boolean>} - True if successful
+ */
+const clearCartItems = async (cart_id) => {
+  try {
+    const deleted = await CartItem.destroy({
+      where: { cart_id }
+    })
+    
+    return deleted >= 0
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error clearing cart items')
+  }
+}
+
 export const cartService = {
   getCart,
   getCartItems,
   checkItemExists,
   insertCartItem,
   updateItemQuantity,
-  deleteCartItem
+  deleteCartItem,
+  clearCartItems
 }

@@ -34,7 +34,8 @@ const validateFilter = (filter) => {
  * @returns {Promise<Array>} - Filtered orders
  */
 const getFilteredOrders = async (filter) => {
-  const orders = await orderService.getAllOrders()
+  const result = await orderService.getAllOrders(1, 10000)
+  const orders = result.orders || []
   
   let filteredOrders = orders
   
@@ -77,10 +78,28 @@ const calculateStatistics = (orders) => {
     shipping_orders: 0,
     completed_orders: 0,
     cancelled_orders: 0,
-    average_order_value: 0
+    average_order_value: 0,
+    timeline: []
   }
   
+  // Group orders by date for timeline data
+  const ordersByDate = {}
+  
   orders.forEach(order => {
+    const orderDate = new Date(order.order_date)
+    const dateKey = orderDate.toISOString().split('T')[0] // YYYY-MM-DD
+    
+    if (!ordersByDate[dateKey]) {
+      ordersByDate[dateKey] = {
+        date: dateKey,
+        revenue: 0,
+        orders: 0
+      }
+    }
+    
+    ordersByDate[dateKey].revenue += parseFloat(order.total_amount) || 0
+    ordersByDate[dateKey].orders += 1
+
     stats.total_revenue += parseFloat(order.total_amount) || 0
 
     switch (order.order_status) {
@@ -101,6 +120,15 @@ const calculateStatistics = (orders) => {
       break
     }
   })
+  
+  // Convert to array and sort by date
+  stats.timeline = Object.values(ordersByDate)
+    .map(item => ({
+      date: item.date,
+      revenue: parseFloat(item.revenue.toFixed(2)),
+      orders: item.orders
+    }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
   
   if (stats.total_orders > 0) {
     stats.average_order_value = stats.total_revenue / stats.total_orders

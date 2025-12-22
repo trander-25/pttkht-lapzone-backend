@@ -36,14 +36,21 @@ const insertOrder = async (order) => {
  * @param {number} user_id - User ID
  * @param {number} page - Page number
  * @param {number} limit - Items per page
+ * @param {string} status - Order status filter (optional)
  * @returns {Promise<Object>} - { orders, pagination }
  */
-const getOrders = async (user_id, page = 1, limit = 10) => {
+const getOrders = async (user_id, page = 1, limit = 10, status = null) => {
   try {
     const offset = (page - 1) * limit
     
+    // Build where clause
+    const whereClause = { user_id }
+    if (status) {
+      whereClause.order_status = status
+    }
+    
     const { count, rows } = await Order.findAndCountAll({
-      where: { user_id },
+      where: whereClause,
       order: [['order_date', 'DESC']],
       limit: limit,
       offset: offset
@@ -200,6 +207,56 @@ const getOrderItems = async (order_id) => {
   }
 }
 
+/**
+ * Search orders by keyword (Admin)
+ * Searches in order_id, receiver_name, and phone fields
+ * @param {string} keyword - Search keyword
+ * @param {number} page - Page number
+ * @param {number} limit - Items per page
+ * @returns {Promise<Object>} - { orders, pagination }
+ */
+const searchOrders = async (keyword, page = 1, limit = 10) => {
+  try {
+    const offset = (page - 1) * limit
+    const { Op } = await import('sequelize')
+    
+    // Build search conditions
+    const whereConditions = {
+      [Op.or]: [
+        { receiver_name: { [Op.like]: `%${keyword}%` } },
+        { phone: { [Op.like]: `%${keyword}%` } }
+      ]
+    }
+    
+    // If keyword is a number, also search by order_id
+    if (!isNaN(keyword)) {
+      whereConditions[Op.or].push({ order_id: parseInt(keyword) })
+    }
+    
+    const { count, rows } = await Order.findAndCountAll({
+      where: whereConditions,
+      order: [['order_date', 'DESC']],
+      limit: limit,
+      offset: offset
+    })
+    
+    const totalPages = Math.ceil(count / limit)
+    
+    return {
+      orders: rows,
+      pagination: {
+        total: count,
+        totalPages: totalPages,
+        currentPage: page,
+        limit: limit,
+        hasMore: page < totalPages
+      }
+    }
+  } catch (error) {
+    throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Error searching orders')
+  }
+}
+
 export const orderService = {
   insertOrder,
   getOrders,
@@ -208,5 +265,6 @@ export const orderService = {
   updateOrder,
   getAllOrders,
   insertOrderItems,
-  getOrderItems
+  getOrderItems,
+  searchOrders
 }

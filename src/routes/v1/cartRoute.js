@@ -36,10 +36,4 @@ Router.delete('/items/:product_id',
   cartController.removeItem
 )
 
-// DELETE /api/v1/cart - Clear all items from cart
-Router.delete('/',
-  authMiddleware.isAuthorized,
-  cartController.clearCart
-)
-
 export const cartRoute = Router
