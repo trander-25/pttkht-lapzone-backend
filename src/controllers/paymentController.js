@@ -93,13 +93,8 @@ const handleMoMoCallback = async (req, res, next) => {
           })
           console.log(`MoMo Callback: Payment ${orderId} updated to PAID`)
 
-          // Update order status to CONFIRMED if still PENDING
-          if (currentOrder.order_status === 'PENDING') {
-            await orderService.updateOrderStatus(orderId, 'CONFIRMED')
-            console.log(`MoMo Callback: Order ${orderId} updated to CONFIRMED`)
-          } else {
-            console.log(`MoMo Callback: Order ${orderId} status is ${currentOrder.order_status}, skipping status update`)
-          }
+          // Keep order status as PENDING - manual confirmation required
+          console.log(`MoMo Callback: Order ${orderId} remains in ${currentOrder.order_status} status - manual confirmation required`)
         } catch (updateError) {
           console.error(`MoMo Callback: Error updating payment/order for order ${orderId}:`, updateError)
           return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -115,7 +110,7 @@ const handleMoMoCallback = async (req, res, next) => {
         success: true,
         message: 'Payment processed successfully',
         payment_status: currentPayment.payment_status === 'PENDING' ? 'PAID' : currentPayment.payment_status,
-        order_status: currentOrder.order_status === 'PENDING' ? 'CONFIRMED' : currentOrder.order_status
+        order_status: currentOrder.order_status
       })
     } else {
       // Payment failed or cancelled, keep status as PENDING

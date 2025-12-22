@@ -32,7 +32,7 @@ const Order = sequelize.define('orders', {
     defaultValue: DataTypes.NOW
   },
   total_amount: {
-    type: DataTypes.DECIMAL(10, 2),
+    type: DataTypes.DECIMAL(12, 2),
     allowNull: false
   },
   order_status: {
